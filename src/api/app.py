@@ -1,9 +1,23 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield   
 
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    return {"message": "vector"}
+    return JSONResponse(
+        status_code=200, content={"message": "Vector DB is running"}
+    )
 
+@app.post("/add")
+async def add():
+    pass
+
+@app.post("/search")
+async def search():
+    pass
