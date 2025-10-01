@@ -1,6 +1,6 @@
 import heapq
 from typing import Dict, List, Tuple
-
+import config
 import numpy as np
 
 
@@ -44,19 +44,29 @@ class Indexer:
 
         final_results = [(-d, i) for d, i in results]
         return final_results
+    
+    # def robust_prune(self, p, candidates):
+    #     neighbors = []
 
-    @staticmethod
-    def distance(x: np.array, y: np.array):
-        return np.linalg.norm(x - y)
 
-    def index():
-        pass
+    # def index(self):
+    #     b = 1
+    #     random_perm = np.random.permutation(n)
+    #     for i in range(n):
+    #         self.robust_prune()
 
     def search():
         pass
 
+    @staticmethod
+    def distance(x: np.array, y: np.array):
+        return np.linalg.norm(x - y)
+    
     def save_index(self, path: str):
         pass
 
     def load_index(self, path: str):
         pass
+
+# Create a global instance of the Indexer
+indexer = Indexer(dimensions=config.VECTOR_DIMENSIONS) 
