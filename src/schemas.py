@@ -2,14 +2,14 @@ from pydantic import BaseModel
 from typing import List
 
 
-class MetadataBase(BaseModel):
+class VectorMetadataBase(BaseModel):
     source_document: str
     content: str
 
-class MetadataCreate(MetadataBase):
+class VectorMetadataCreate(VectorMetadataBase):
     pass
 
-class Metadata(MetadataBase):
+class Metadata(VectorMetadataBase):
     vector_id: int
 
     class Config:
@@ -20,7 +20,7 @@ class VectorBase(BaseModel):
 
 class VectorCreate(VectorBase):
     vector: List[float]
-    metadata: MetadataCreate
+    metadata: VectorMetadataCreate
 
 class Vector(VectorBase):
     id: int
