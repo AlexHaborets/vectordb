@@ -32,35 +32,35 @@ class Vector(Base):
 
     neighbors = relationship(
         "Vector",
-        secondary=graph_association_table == graph_association_table.c.source_id,
-        primaryjoin=id == graph_association_table.c.neighbor_id,
+        secondary=graph_association_table ,
+        primaryjoin = (id == graph_association_table.c.source_id),
+        secondaryjoin = (id == graph_association_table.c.neighbor_id),
         backref="neighbor_of",
     )
 
-    metadata = relationship(
+    vector_metadata = relationship(
         "Metadata", uselist=False, back_populates="vector", cascade="all, delete-orphan"
     )
 
     @property
     def numpy_vector(self):
-        return np.frombuffer(self.vector_data, dtype=np.float32)
+        return np.frombuffer(self.vector, dtype=np.float32)
 
     @numpy_vector.setter
     def numpy_vector(self, value: np.ndarray):
-        self.vector_data = value.astype(np.float32).tobytes()
+        self.vector = value.astype(np.float32).tobytes()
 
 
-class Metadata(Base):
-    __tablename__ = "metadata"
+class VectorMetadata(Base):
+    __tablename__ = "vector_metadata"
     vector_id = Column(
         Integer, ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
     )
-    vector = Column(BLOB, nullable=False)
 
     source_document = Column(String, nullable=False)
     content = Column(Text, nullable=False)
 
-    vector = relationship("Vector", back_populates="metadata")
+    vector = relationship("Vector", back_populates="vector_metadata")
 
 
 class IndexMetadata(Base):
