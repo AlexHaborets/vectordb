@@ -1,3 +1,3 @@
 # Simple vector DB in Python
 
-Read title
+This is a very simple vector database implementation in Python.
