@@ -1,6 +1,18 @@
+from typing import List
+
 import numpy as np
-from sqlalchemy import BLOB, Column, ForeignKey, Integer, String, Table, Text
-from sqlalchemy.orm import DeclarativeBase, relationship
+from numpy.typing import NDArray
+from sqlalchemy import (
+    BLOB,
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -27,44 +39,55 @@ graph_association_table = Table(
 
 class Vector(Base):
     __tablename__ = "vectors"
-    id = Column(Integer, primary_key=True)
-    vector = Column(BLOB, nullable=False)
 
-    neighbors = relationship(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vector_blob: Mapped[bytes] = mapped_column(BLOB, nullable=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+
+    neighbors: Mapped[List["Vector"]] = relationship(
         "Vector",
-        secondary=graph_association_table ,
-        primaryjoin = (id == graph_association_table.c.source_id),
-        secondaryjoin = (id == graph_association_table.c.neighbor_id),
-        backref="neighbor_of",
+        secondary=graph_association_table,
+        primaryjoin=(id == graph_association_table.c.source_id),
+        secondaryjoin=(id == graph_association_table.c.neighbor_id),
     )
 
-    vector_metadata = relationship(
-        "Metadata", uselist=False, back_populates="vector", cascade="all, delete-orphan"
+    vector_metadata: Mapped["VectorMetadata"] = relationship(
+        back_populates="vector", cascade="all, delete-orphan"
     )
 
     @property
-    def numpy_vector(self):
-        return np.frombuffer(self.vector, dtype=np.float32)
+    def numpy_vector(self) -> NDArray[np.float32]:
+        return np.frombuffer(self.vector_blob, dtype=np.float32)
 
     @numpy_vector.setter
-    def numpy_vector(self, value: np.ndarray):
-        self.vector = value.astype(np.float32).tobytes()
+    def numpy_vector(self, value: NDArray[np.float32]):
+        self.vector_blob = value.astype(np.float32).tobytes()
+
+    @property
+    def vector(self) -> List[float]:
+        return self.numpy_vector.tolist()
+    
+    @vector.setter
+    def vector(self, value: List[float]):
+        self.numpy_vector = np.array(value)
 
 
 class VectorMetadata(Base):
     __tablename__ = "vector_metadata"
-    vector_id = Column(
-        Integer, ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
+
+    vector_id: Mapped[int] = mapped_column(
+        ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
     )
 
-    source_document = Column(String, nullable=False)
-    content = Column(Text, nullable=False)
+    source_document: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    vector = relationship("Vector", back_populates="vector_metadata")
+    vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")
 
 
 class IndexMetadata(Base):
-    # A helper key value store
+    # A helper key-value store
     __tablename__ = "index_metadata"
-    key = Column(String, primary_key=True)
-    value = Column(String, nullable=False)
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(String, nullable=False)

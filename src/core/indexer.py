@@ -3,14 +3,16 @@ from typing import Dict, List, Tuple
 import config
 import numpy as np
 
+from src.db.session import SessionManager
+from src.db.crud import CRUDRepository
 
 class Indexer:
     def __init__(self, dims: int):
-        self.vectors: np.ndarray = np.empty((0, dims), dtype=np.float32)
+        self.vectors: Dict[int, np.ndarray] = {}
         self.graph: Dict[int, List[int]] = {}
         self.entry_point: int
 
-    def greedy_search(self, x_q, k) -> List[Tuple[float, int]]:
+    def greedy_search(self, x_q, l, k) -> List[Tuple[float, int]]:
         entry_vec = self.vectors[self.entry_point]
         dist = self.distance(x_q, entry_vec)
 
@@ -45,15 +47,11 @@ class Indexer:
         final_results = [(-d, i) for d, i in results]
         return final_results
     
-    # def robust_prune(self, p, candidates):
-    #     neighbors = []
+    def robust_prune(self, p, candidates):
+        pass
 
-
-    # def index(self):
-    #     b = 1
-    #     random_perm = np.random.permutation(n)
-    #     for i in range(n):
-    #         self.robust_prune()
+    def index(self):
+        pass
 
     def search():
         pass
@@ -62,11 +60,13 @@ class Indexer:
     def distance(x: np.array, y: np.array):
         return np.linalg.norm(x - y)
     
-    def save_index(self, path: str):
+    def save_index(self, session_manager: SessionManager):
         pass
 
-    def load_index(self, path: str):
-        pass
+    def load_index(self, session_manager: SessionManager):
+        with session_manager.get_session() as db:
+            crud = CRUDRepository(db)
+            self.graph = crud.get_graph()            
 
 # Create a global instance of the Indexer
 indexer = Indexer(dimensions=config.VECTOR_DIMENSIONS) 
