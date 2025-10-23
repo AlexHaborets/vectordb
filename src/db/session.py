@@ -1,9 +1,11 @@
+from contextlib import contextmanager
 from typing import Any, Generator
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import Session
 
 from src import config
+
 
 class SessionManager:
     def __init__(self, url: str):
@@ -15,6 +17,7 @@ class SessionManager:
     def close(self):
         self.engine.dispose()
 
+    @contextmanager
     def get_session(self) -> Generator[Session, Any, None]:
         session = self.sessionmaker()
         try:
