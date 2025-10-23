@@ -5,3 +5,5 @@ DB_FILE = ROOT_DIR / "data" / "vector_db.sqlite"
 DATABASE_URL = f"sqlite:///{DB_FILE}"
 
 VECTOR_DIMENSIONS = 64
+
+INDEX_RND_SAMPLE_SIZE = 1000
