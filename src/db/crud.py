@@ -60,7 +60,7 @@ class VectorDBRepository:
     def get_vectors_by_ids_lite(self, ids: List[int]) -> List[schemas.VectorLite]:
         vectors = (
             self.session.query(models.Vector)
-            .filter(models.Vector.deleted == False and models.Vector.id._in(ids))  # noqa: E712
+            .filter(models.Vector.deleted == False and models.Vector.id.in_(ids))  # noqa: E712
             .all()
         )
         return [schemas.VectorLite.model_validate(vec) for vec in vectors]
@@ -100,11 +100,30 @@ class VectorDBRepository:
 
     def save_graph(self, graph: Dict[int, List[int]]) -> None:
         self.session.execute(models.graph_association_table.delete())
+        self.session.flush()
 
         if not graph:
             self.session.commit()
             return
         
+        all_vector_ids = set(graph.keys())
+        for neighbors in graph.values():
+            all_vector_ids.update(neighbors)
+        
+        vectors_in_db = self.session.query(models.Vector).filter(
+            models.Vector.id.in_(list(all_vector_ids))
+        ).all()
+
+        vector_map = {v.id: v for v in vectors_in_db}
+
+        for vector_id, neighbor_ids in graph.items():
+            vector = vector_map.get(vector_id)
+            if not vector:
+                continue
+            vector.neighbors = [vector_map[n_id] for n_id in neighbor_ids if n_id in vector_map]
+
+        self.session.commit()
+
     def get_vector_ids(self) -> List[int]:
         vector_ids = self.session.scalars(
             select(models.Vector.id)
@@ -119,6 +138,6 @@ class VectorDBRepository:
         ))
         self.session.commit()
 
-    def get_index_metadata(self, key: str) -> Optional[schemas.IndexMetadata]:
+    def get_index_metadata(self, key: str) -> Optional[str]:
         metadata = self.session.get(models.IndexMetadata, key)
-        return schemas.IndexMetadata.model_validate(metadata) if metadata else None
+        return metadata.value if metadata else None

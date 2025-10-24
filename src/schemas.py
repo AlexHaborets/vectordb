@@ -49,6 +49,14 @@ class VectorLite(VectorBase):
     id: int
     numpy_vector: np.ndarray
 
+    def __hash__(self):
+        return hash(self.id)
+
+    def __eq__(self, other):
+        if not isinstance(other, VectorLite):
+            return NotImplemented
+        return self.id == other.id
+
     class Config:
         from_attributes = True
         arbitrary_types_allowed=True
