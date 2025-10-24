@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    indexer = VamanaIndexer(dims=config.VECTOR_DIMENSIONS)
+    indexer = VamanaIndexer()
     
     logger.info("Vector DB starting: loading index")
     with session_manager.get_session() as session:

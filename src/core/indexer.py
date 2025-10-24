@@ -12,9 +12,9 @@ from src.schemas import VectorLite
 
 
 class VamanaIndexer:
-    def __init__(self, dims: int):
+    def __init__(self) -> None:
         self.graph: Dict[int, List[int]] = {}
-        self.entry_point: int
+        self.entry_point: Optional[VectorLite] = None
 
     def greedy_search(
         self,
@@ -33,7 +33,7 @@ class VamanaIndexer:
         candidates = set([entry])
         visited = set()
 
-        def distance_fn(p: VectorLite):
+        def distance_fn(p: VectorLite) -> float:
             return self.distance(p, query)
 
         while candidates - visited:
@@ -47,17 +47,44 @@ class VamanaIndexer:
         closest_k = heapq.nsmallest(k, candidates, key=distance_fn)
         return (closest_k, visited)
 
-    def robust_prune(self, entry: VectorLite, candidates: set, alpha: float, r: int):
+    def robust_prune(
+        self,
+        source: VectorLite,
+        candidates: set[VectorLite],
+        alpha: float,
+        R: int,
+        repo: VectorDBRepository,
+    ) -> None:
         """
         Data: Graph G, point p ∈ P , candidate set V,
             distance threshold α ≥ 1, degree bound R
         Result: G is modified by setting at most R new
             out-neighbors for p
         """
+        candidates = candidates.union(self.get_neighbors(source, repo))
+        if source in candidates:
+            candidates.remove(source)
+        self.set_neighbors(source, set())
 
-        pass
+        def distance_fn(p: VectorLite) -> float:
+            return self.distance(p, source)
 
-    def index(self, L, R, repo: VectorDBRepository):
+        while candidates:
+            p_star = min(candidates, key=distance_fn)
+            self.add_neighbors(source, set([p_star]))
+
+            if len(self.get_neighbor_ids(source)) == R:
+                break
+
+            to_prune = []
+            for other in candidates:
+                if alpha * self.distance(p_star, other) <= self.distance(source, other):
+                    to_prune.append(other)
+
+            for vector in to_prune:
+                candidates.remove(vector)
+
+    def index(self, alpha, L, R, repo: VectorDBRepository):
         """
         Data: Database P with n points where i-th point has coords xi, parameters α, L, R
         Result: Directed graph G over P with out-degree <=R
@@ -66,8 +93,8 @@ class VamanaIndexer:
         self.graph = self.random_regular_graph(vector_ids, R)
         n = len(vector_ids)
 
-        sigma = copy(vector_ids)
-        shuffle(vector_ids)
+        sigma = vector_ids
+        shuffle(sigma)
         mediod = self.get_mediod(repo)
         if not mediod:
             raise Exception("couldn't find mediod")
@@ -76,10 +103,35 @@ class VamanaIndexer:
             query = repo.get_vector_by_id_lite(sigma[i])
             if not query:
                 raise Exception("couldn't find query vec")
-            (l, v) = self.greedy_search(mediod, query, 1, L, repo)  # type: ignore
+            (_, V) = self.greedy_search(mediod, query, 1, L, repo)
+            self.robust_prune(query, V, alpha, R, repo)
 
-    def search(self):
-        pass
+            for other in self.get_neighbors(query, repo):
+                other_neighbors = self.get_neighbors(other, repo)
+                other_neighbors = set(other_neighbors + [query])
+
+                if len(other_neighbors) > R:
+                    self.robust_prune(other, other_neighbors, alpha, R, repo)
+                else:
+                    self.set_neighbors(other, other_neighbors)
+        self.entry_point = mediod
+
+    def search(self, query: VectorLite, k: int, repo: VectorDBRepository) -> List[VectorLite]:
+        if not self.entry_point:
+            return []
+        (results, _) =  self.greedy_search(entry=self.entry_point,
+                                  query=query,
+                                  k=k,
+                                  L=10,
+                                  repo=repo)
+        return results
+
+    def get_neighbor_ids(self, v: VectorLite | int) -> List[int]:
+        if isinstance(v, VectorLite):
+            neighbor_ids = self.graph.get(v.id)
+        else:
+            neighbor_ids = self.graph.get(v)
+        return neighbor_ids if neighbor_ids else []
 
     def get_neighbors(
         self, v: VectorLite, repo: VectorDBRepository
@@ -88,6 +140,12 @@ class VamanaIndexer:
         if not neighbor_ids:
             return []
         return repo.get_vectors_by_ids_lite(neighbor_ids)
+
+    def set_neighbors(self, v: VectorLite, neighbors: set[VectorLite]):
+        self.graph[v.id] = [n.id for n in neighbors]
+
+    def add_neighbors(self, v: VectorLite, neighbors: set[VectorLite]):
+        self.graph[v.id] += [n.id for n in neighbors]
 
     def get_mediod(self, repo: VectorDBRepository) -> Optional[VectorLite]:
         # TODO: Replace this function with an optimized vectorized version
@@ -119,10 +177,19 @@ class VamanaIndexer:
     def distance(x: VectorLite, y: VectorLite) -> float:
         return float(np.linalg.norm(x.numpy_vector - y.numpy_vector))
 
-    def save_index(self, repo: VectorDBRepository):
-        repo.save_graph(self.graph)
-        # repo.add_index_metadata("entry_point", str(self.entry_point))
+    def save_index(self, repo: VectorDBRepository) -> None:
+        if self.entry_point:
+            repo.save_graph(self.graph)
+            repo.add_index_metadata("entry_point", str(self.entry_point.id))
 
-    def load_index(self, repo: VectorDBRepository):
-        self.graph = repo.get_graph()
+    def load_index(self, repo: VectorDBRepository) -> None:
+        metadata = repo.get_index_metadata("entry_point")
+        if not metadata:
+            return
         
+        entry_id = int(metadata)
+        entry_point = repo.get_vector_by_id_lite(entry_id)
+        if not entry_point:
+            raise Exception("entry_point vector doesn't exist")
+        self.entry_point = entry_point
+        self.graph = repo.get_graph()
