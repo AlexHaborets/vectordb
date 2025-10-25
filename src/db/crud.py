@@ -127,12 +127,13 @@ class VectorDBRepository:
     def get_vector_ids(self) -> List[int]:
         vector_ids = self.session.scalars(
             select(models.Vector.id)
+            .filter(models.Vector.deleted == False)  # noqa: E712
         ).all()
 
         return list(vector_ids)
 
     def add_index_metadata(self, key: str, value: str):
-        self.session.add(models.IndexMetadata(
+        self.session.merge(models.IndexMetadata(
             key = key,
             value = value
         ))

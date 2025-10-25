@@ -4,7 +4,6 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from src import config
 from src.api.routers import vector_router, search_router
 from src.core import VamanaIndexer
 from src.db import session_manager
@@ -20,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.logger = logger
+
     indexer = VamanaIndexer()
     
     logger.info("Vector DB starting: loading index")

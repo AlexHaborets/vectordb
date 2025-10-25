@@ -1,6 +1,5 @@
 import heapq
 import random
-from copy import copy
 from random import shuffle
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +7,7 @@ import numpy as np
 
 from src import config
 from src.db.crud import VectorDBRepository
-from src.schemas import VectorLite
+from src.schemas import Query, VectorLite
 
 
 class VamanaIndexer:
@@ -91,7 +90,6 @@ class VamanaIndexer:
         """
         vector_ids = repo.get_vector_ids()
         self.graph = self.random_regular_graph(vector_ids, R)
-        n = len(vector_ids)
 
         sigma = vector_ids
         shuffle(sigma)
@@ -99,8 +97,8 @@ class VamanaIndexer:
         if not mediod:
             raise Exception("couldn't find mediod")
 
-        for i in range(n):
-            query = repo.get_vector_by_id_lite(sigma[i])
+        for i in sigma:
+            query = repo.get_vector_by_id_lite(i)
             if not query:
                 raise Exception("couldn't find query vec")
             (_, V) = self.greedy_search(mediod, query, 1, L, repo)
@@ -116,13 +114,14 @@ class VamanaIndexer:
                     self.set_neighbors(other, other_neighbors)
         self.entry_point = mediod
 
-    def search(self, query: VectorLite, k: int, repo: VectorDBRepository) -> List[VectorLite]:
+    def search(self, query: Query, k: int, L: int, repo: VectorDBRepository) -> List[VectorLite]:
+        
         if not self.entry_point:
             return []
         (results, _) =  self.greedy_search(entry=self.entry_point,
-                                  query=query,
+                                  query=VectorLite.from_query(query),
                                   k=k,
-                                  L=10,
+                                  L=L,
                                   repo=repo)
         return results
 
@@ -166,6 +165,11 @@ class VamanaIndexer:
     def random_regular_graph(ids: List[int], r: int) -> Dict[int, List[int]]:
         all_ids = set(ids)
         graph = {}
+
+        if len(all_ids) <= r:
+            for current_id in all_ids:
+                graph[current_id] = list(all_ids - {current_id})
+            return graph
 
         for id in all_ids:
             neighbors = random.sample(list(all_ids - {id}), r)
