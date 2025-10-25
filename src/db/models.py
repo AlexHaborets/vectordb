@@ -14,6 +14,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from src.config import NUMPY_DTYPE
+
 
 class Base(DeclarativeBase):
     pass
@@ -56,12 +58,12 @@ class Vector(Base):
     )
 
     @property
-    def numpy_vector(self) -> NDArray[np.float32]:
-        return np.frombuffer(self.vector_blob, dtype=np.float32)
+    def numpy_vector(self) -> NDArray[NUMPY_DTYPE]:
+        return np.frombuffer(self.vector_blob, dtype=NUMPY_DTYPE)
 
     @numpy_vector.setter
-    def numpy_vector(self, value: NDArray[np.float32]):
-        self.vector_blob = value.astype(np.float32).tobytes()
+    def numpy_vector(self, value: NDArray[NUMPY_DTYPE]):
+        self.vector_blob = value.astype(NUMPY_DTYPE).tobytes()
 
     @property
     def vector(self) -> List[float]:
