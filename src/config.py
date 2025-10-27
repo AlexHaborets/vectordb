@@ -9,8 +9,15 @@ VECTOR_DIMENSIONS = 4
 
 INDEX_RND_SAMPLE_SIZE = 1000
 
-VAMANA_L = 3
-VAMANA_R = 2
+# Search list size during quering
+VAMANA_L_SEARCH = 100
+# Search list size during building the index
+VAMANA_L_BUILD = 64
+VAMANA_R = 32
 VAMANA_ALPHA = 1.2 
+
+# Decimal places to round the similarity score 
+# between the query and vectors-results from search 
+SIMILARITY_SCORE_PRECISION = 4
 
 NUMPY_DTYPE = np.float32

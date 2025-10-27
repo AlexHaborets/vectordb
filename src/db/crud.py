@@ -21,6 +21,7 @@ class VectorDBRepository:
             .filter(
                 models.Vector.deleted == False  # noqa: E712
             )
+            .order_by(models.Vector.id)
             .all()
         )
         return [schemas.Vector.model_validate(vec) for vec in vectors]
@@ -31,6 +32,7 @@ class VectorDBRepository:
             .filter(
                 models.Vector.deleted == False  # noqa: E712
             )
+            .order_by(models.Vector.id)
             .all()
         )
         return [schemas.VectorLite.model_validate(vec) for vec in vectors]
@@ -60,10 +62,20 @@ class VectorDBRepository:
     def get_vectors_by_ids_lite(self, ids: List[int]) -> List[schemas.VectorLite]:
         vectors = (
             self.session.query(models.Vector)
-            .filter(models.Vector.deleted == False and models.Vector.id.in_(ids))  # noqa: E712
+            .filter(models.Vector.deleted == False) # noqa: E712
+            .filter(models.Vector.id.in_(ids))
             .all()
         )
         return [schemas.VectorLite.model_validate(vec) for vec in vectors]
+    
+    def get_vectors_by_ids(self, ids: List[int]) -> List[schemas.Vector]:
+        vectors = (
+            self.session.query(models.Vector)
+            .filter(models.Vector.deleted == False) # noqa: E712
+            .filter(models.Vector.id.in_(ids))   
+            .all()
+        )
+        return [schemas.Vector.model_validate(vec) for vec in vectors]
 
     def add_vector(self, vector: schemas.VectorCreate) -> schemas.Vector:
         new_vector = models.Vector(

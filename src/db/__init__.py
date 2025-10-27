@@ -1,5 +1,5 @@
-from .session import SessionManager
+from .session import SessionManager, session_manager
 from .models import Base
-from .session import session_manager
+from .crud import VectorDBRepository
 
-__all__ = ["SessionManager", "Base", "session_manager"]
+__all__ = ["SessionManager", "Base", "session_manager", "VectorDBRepository"]

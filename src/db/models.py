@@ -44,7 +44,9 @@ class Vector(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vector_blob: Mapped[bytes] = mapped_column(BLOB, nullable=False)
-    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
 
     neighbors: Mapped[List["Vector"]] = relationship(
         "Vector",
@@ -68,7 +70,7 @@ class Vector(Base):
     @property
     def vector(self) -> List[float]:
         return self.numpy_vector.tolist()
-    
+
     @vector.setter
     def vector(self, value: List[float]):
         self.numpy_vector = np.array(value)
