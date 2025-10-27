@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import List, TYPE_CHECKING
+from typing import List
 
 import numpy as np
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, computed_field, field_validator
 
-from src.config import NUMPY_DTYPE
+from src import config
 
 
 class VectorMetadataBase(BaseModel):
@@ -51,6 +51,14 @@ class Vector(VectorBase):
 class Query(BaseModel):
     vector: List[float]
 
+    @computed_field
+    @property
+    def numpy_vector(self) -> np.ndarray:
+        return np.array(self.vector, dtype=config.NUMPY_DTYPE)
+    
+    class Config:
+        arbitrary_types_allowed = True
+
 class VectorLite(VectorBase):
     id: int
     numpy_vector: np.ndarray
@@ -62,11 +70,13 @@ class VectorLite(VectorBase):
         if not isinstance(other, VectorLite):
             return NotImplemented
         return self.id == other.id
-
+    
     @classmethod
-    def from_query(cls, query: Query) -> "VectorLite":
-        numpy_array = np.array(query.vector, dtype=NUMPY_DTYPE)
-        return cls(id=-1, numpy_vector=numpy_array)
+    def from_vector(cls, vector: Vector) -> "VectorLite":
+        return cls(
+            id = vector.id, 
+            numpy_vector=np.array(vector.vector, dtype=config.NUMPY_DTYPE)
+        )
 
     class Config:
         from_attributes = True
@@ -74,12 +84,8 @@ class VectorLite(VectorBase):
 
 
 class SearchResult(BaseModel):
-    vector: List[float]
-
-    @classmethod
-    def from_vector_lite(cls, v: VectorLite) -> "SearchResult":
-        return cls(vector=v.numpy_vector.tolist())
-
+    score: float
+    vector: Vector
 
 class IndexMetadata(BaseModel):
     key: str

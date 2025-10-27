@@ -1,3 +1,3 @@
-from .indexer import VamanaIndexer
+from .indexer import VamanaIndexer, VamanaConfig
 
-__all__ = ["VamanaIndexer"]
+__all__ = ["VamanaIndexer", "VamanaConfig"]

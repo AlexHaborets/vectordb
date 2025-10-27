@@ -4,10 +4,10 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from src.api.routers import vector_router, search_router
-from src.core import VamanaIndexer
-from src.db import session_manager
-from src.db.crud import VectorDBRepository
+from src import config
+from src.api import vector_router, search_router
+from src.core import VamanaIndexer, VamanaConfig
+from src.db import session_manager, VectorDBRepository
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,11 +17,20 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.logger = logger
 
-    indexer = VamanaIndexer()
+    indexer_config = VamanaConfig(
+        dims=config.VECTOR_DIMENSIONS,
+        alpha=config.VAMANA_ALPHA,
+        L_build=config.VAMANA_L_BUILD,
+        L_search=config.VAMANA_L_SEARCH,
+        R=config.VAMANA_R
+    )
+
+    indexer = VamanaIndexer(indexer_config)
     
     logger.info("Vector DB starting: loading index")
     with session_manager.get_session() as session:

@@ -1,43 +1,56 @@
 import heapq
 import random
-from random import shuffle
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
 from src import config
+from src.core.graph import Graph
+from src.core.vector_store import VectorStore
 from src.db.crud import VectorDBRepository
-from src.schemas import Query, VectorLite
+from src.schemas import VectorLite
+from dataclasses import dataclass
 
+@dataclass
+class VamanaConfig:
+    dims: int
+    alpha: float
+    L_build: int
+    L_search: int
+    R: int
 
 class VamanaIndexer:
-    def __init__(self) -> None:
-        self.graph: Dict[int, List[int]] = {}
-        self.entry_point: Optional[VectorLite] = None
+    def __init__(self, config: VamanaConfig) -> None:
+        self.graph: Graph
+        self.entry_point: int
+        self.vector_store: VectorStore
+
+        # Indexing/search parameters
+        self._dims = config.dims
+        self._alpha = config.alpha
+        self._L_build = config.L_build
+        self._L_search = config.L_search
+        self._R = config.R
 
     def greedy_search(
-        self,
-        entry: VectorLite,
-        query: VectorLite,
-        k: int,
-        L: int,
-        repo: VectorDBRepository,
-    ) -> tuple[list[VectorLite], set[Any]]:
+        self, entry_id: int, query_vector: np.ndarray, k: int, L: int
+    ) -> tuple[list[int], set[Any]]:
         """
         Data: Graph G with start node s, query xq, result
             size k, search list size L ≥ k
         Result: Result set L containing k-approx NNs, and
             a set V containing all the visited nodes
         """
-        candidates = set([entry])
+        candidates = set([entry_id])
         visited = set()
 
-        def distance_fn(p: VectorLite) -> float:
-            return self.distance(p, query)
+        def distance_fn(id: int) -> float:
+            p = self.vector_store.get(id)
+            return self.distance(p, query_vector)
 
         while candidates - visited:
             p_star = min(candidates - visited, key=distance_fn)
-            candidates = candidates.union(self.get_neighbors(p_star, repo))
+            candidates = candidates.union(self.graph.get_neighbors(p_star))
             visited.add(p_star)
 
             if len(candidates) > L:
@@ -46,154 +59,154 @@ class VamanaIndexer:
         closest_k = heapq.nsmallest(k, candidates, key=distance_fn)
         return (closest_k, visited)
 
-    def robust_prune(
-        self,
-        source: VectorLite,
-        candidates: set[VectorLite],
-        alpha: float,
-        R: int,
-        repo: VectorDBRepository,
-    ) -> None:
+    def robust_prune(self, source: int, candidates: set[int]) -> None:
         """
         Data: Graph G, point p ∈ P , candidate set V,
             distance threshold α ≥ 1, degree bound R
         Result: G is modified by setting at most R new
             out-neighbors for p
         """
-        candidates = candidates.union(self.get_neighbors(source, repo))
+        candidates = candidates.union(self.graph.get_neighbors(source))
         if source in candidates:
             candidates.remove(source)
-        self.set_neighbors(source, set())
+        self.graph.set_neighbors(source, set())
 
-        def distance_fn(p: VectorLite) -> float:
-            return self.distance(p, source)
+        source_vector = self.vector_store.get(source)
+
+        def distance_fn(id: int) -> float:
+            p = self.vector_store.get(id)
+            return self.distance(p, source_vector)
 
         while candidates:
             p_star = min(candidates, key=distance_fn)
-            self.add_neighbors(source, set([p_star]))
+            self.graph.add_neighbors(source, set([p_star]))
 
-            if len(self.get_neighbor_ids(source)) == R:
+            if len(self.graph.get_neighbors(source)) == self._R:
                 break
 
             to_prune = []
+            p_star_vector = self.vector_store.get(p_star)
             for other in candidates:
-                if alpha * self.distance(p_star, other) <= self.distance(source, other):
+                other_vector = self.vector_store.get(other)
+                if self._alpha * self.distance(p_star_vector, other_vector) <= self.distance(
+                    source_vector, other_vector
+                ):
                     to_prune.append(other)
 
             for vector in to_prune:
                 candidates.remove(vector)
 
-    def index(self, alpha, L, R, repo: VectorDBRepository):
+    def index(self) -> None:
         """
         Data: Database P with n points where i-th point has coords xi, parameters α, L, R
         Result: Directed graph G over P with out-degree <=R
         """
-        vector_ids = repo.get_vector_ids()
-        self.graph = self.random_regular_graph(vector_ids, R)
+        vector_ids = self.vector_store.get_dbids()
+        self.graph = Graph.random_regular(
+            verteces=vector_ids, 
+            r=self._R
+        )
 
         sigma = vector_ids
-        shuffle(sigma)
-        mediod = self.get_mediod(repo)
-        if not mediod:
-            raise Exception("couldn't find mediod")
+        random.shuffle(sigma)
+        mediod_id = self.get_mediod()
+        if not mediod_id:
+            raise ValueError("what")
 
         for i in sigma:
-            query = repo.get_vector_by_id_lite(i)
-            if not query:
-                raise Exception("couldn't find query vec")
-            (_, V) = self.greedy_search(mediod, query, 1, L, repo)
-            self.robust_prune(query, V, alpha, R, repo)
+            query_vector = self.vector_store.get(i)
+            (_, V) = self.greedy_search(
+                entry_id=mediod_id, 
+                query_vector=query_vector, 
+                k=1,
+                L=self._L_build
+            )
+            
+            self.robust_prune(source=i, candidates=V)
 
-            for other in self.get_neighbors(query, repo):
-                other_neighbors = self.get_neighbors(other, repo)
-                other_neighbors = set(other_neighbors + [query])
+            query_neighbors = self.graph.get_neighbors(i)
+            for other in query_neighbors:
+                other_neighbors = self.graph.get_neighbors(other)
+                other_neighbors = set(other_neighbors + [i])
 
-                if len(other_neighbors) > R:
-                    self.robust_prune(other, other_neighbors, alpha, R, repo)
+                if len(other_neighbors) > self._R:
+                    self.robust_prune(source=other, candidates=other_neighbors)
                 else:
-                    self.set_neighbors(other, other_neighbors)
-        self.entry_point = mediod
+                    self.graph.set_neighbors(other, other_neighbors)
 
-    def search(self, query: Query, k: int, L: int, repo: VectorDBRepository) -> List[VectorLite]:
-        
+        self.entry_point = mediod_id
+
+    def update(self, vector: VectorLite) -> None:
+        self.vector_store.add(vector)
+        # TODO: Use incremental updates instead of a full reindexing
+        self.index()
+
+    def search(
+        self, query_vector: np.ndarray, k: int
+    ) -> List[Tuple[float, int]]:
         if not self.entry_point:
             return []
-        (results, _) =  self.greedy_search(entry=self.entry_point,
-                                  query=VectorLite.from_query(query),
-                                  k=k,
-                                  L=L,
-                                  repo=repo)
-        return results
 
-    def get_neighbor_ids(self, v: VectorLite | int) -> List[int]:
-        if isinstance(v, VectorLite):
-            neighbor_ids = self.graph.get(v.id)
-        else:
-            neighbor_ids = self.graph.get(v)
-        return neighbor_ids if neighbor_ids else []
+        # TODO: In the future use Beam search instead
+        results, _ = self.greedy_search(
+            entry_id=self.entry_point,
+            query_vector=query_vector,
+            k=k,
+            L=self._L_search
+        )
 
-    def get_neighbors(
-        self, v: VectorLite, repo: VectorDBRepository
-    ) -> List[VectorLite]:
-        neighbor_ids = self.graph.get(v.id)
-        if not neighbor_ids:
+        if not results:
             return []
-        return repo.get_vectors_by_ids_lite(neighbor_ids)
 
-    def set_neighbors(self, v: VectorLite, neighbors: set[VectorLite]):
-        self.graph[v.id] = [n.id for n in neighbors]
+        def get_score(vec: np.ndarray) -> float:
+            distance = self.distance(vec, query_vector)
+            return 1 / (1 + distance)
 
-    def add_neighbors(self, v: VectorLite, neighbors: set[VectorLite]):
-        self.graph[v.id] += [n.id for n in neighbors]
+        result_vectors = self.vector_store.get_batch(results)
+        query_results = [
+            (get_score(vector), index) for vector, index in zip(result_vectors, results)
+        ]
+        query_results.sort(key=lambda x: x[0], reverse=True)
 
-    def get_mediod(self, repo: VectorDBRepository) -> Optional[VectorLite]:
+        return query_results
+
+    def get_mediod(self) -> Optional[int]:
         # TODO: Replace this function with an optimized vectorized version
-        sample = repo.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
+        sample = self.vector_store.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
+        if len(sample) == 1: 
+            return list(sample.keys())[0]
         mediod = None
         minimum = float("inf")
-        for x in sample:
-            for y in sample:
-                if x.id == y.id:
+        for i, x in sample.items():
+            for j, y in sample.items():
+                if i == j:
                     continue
                 d = self.distance(x, y)
                 if d < minimum:
                     minimum = d
-                    mediod = x
+                    mediod = i
         return mediod
 
     @staticmethod
-    def random_regular_graph(ids: List[int], r: int) -> Dict[int, List[int]]:
-        all_ids = set(ids)
-        graph = {}
-
-        if len(all_ids) <= r:
-            for current_id in all_ids:
-                graph[current_id] = list(all_ids - {current_id})
-            return graph
-
-        for id in all_ids:
-            neighbors = random.sample(list(all_ids - {id}), r)
-            graph[id] = neighbors
-
-        return graph
-
-    @staticmethod
-    def distance(x: VectorLite, y: VectorLite) -> float:
-        return float(np.linalg.norm(x.numpy_vector - y.numpy_vector))
+    def distance(x: np.ndarray, y: np.ndarray) -> float:
+        return float(np.linalg.norm(x - y))
 
     def save_index(self, repo: VectorDBRepository) -> None:
         if self.entry_point:
-            repo.save_graph(self.graph)
-            repo.add_index_metadata("entry_point", str(self.entry_point.id))
+            repo.save_graph(self.graph.graph)
+            repo.add_index_metadata("entry_point", str(self.entry_point))
 
     def load_index(self, repo: VectorDBRepository) -> None:
+        self.vector_store = VectorStore.build_from_vectors(
+            vectors=repo.get_all_vectors_lite(), 
+            dims=self._dims
+        )
+        
         metadata = repo.get_index_metadata("entry_point")
         if not metadata:
             return
-        
-        entry_id = int(metadata)
-        entry_point = repo.get_vector_by_id_lite(entry_id)
-        if not entry_point:
-            raise Exception("entry_point vector doesn't exist")
-        self.entry_point = entry_point
-        self.graph = repo.get_graph()
+
+        self.entry_point = int(metadata)
+        self.graph = Graph(repo.get_graph())
+
+
