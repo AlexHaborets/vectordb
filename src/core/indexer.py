@@ -3,6 +3,7 @@ import random
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
+from scipy.spatial.distance import pdist, squareform
 
 from src import config
 from src.core.graph import Graph
@@ -11,6 +12,7 @@ from src.db.crud import VectorDBRepository
 from src.schemas import VectorLite
 from dataclasses import dataclass
 
+
 @dataclass
 class VamanaConfig:
     dims: int
@@ -18,6 +20,7 @@ class VamanaConfig:
     L_build: int
     L_search: int
     R: int
+
 
 class VamanaIndexer:
     def __init__(self, config: VamanaConfig) -> None:
@@ -88,9 +91,9 @@ class VamanaIndexer:
             p_star_vector = self.vector_store.get(p_star)
             for other in candidates:
                 other_vector = self.vector_store.get(other)
-                if self._alpha * self.distance(p_star_vector, other_vector) <= self.distance(
-                    source_vector, other_vector
-                ):
+                if self._alpha * self.distance(
+                    p_star_vector, other_vector
+                ) <= self.distance(source_vector, other_vector):
                     to_prune.append(other)
 
             for vector in to_prune:
@@ -102,10 +105,7 @@ class VamanaIndexer:
         Result: Directed graph G over P with out-degree <=R
         """
         vector_ids = self.vector_store.get_dbids()
-        self.graph = Graph.random_regular(
-            verteces=vector_ids, 
-            r=self._R
-        )
+        self.graph = Graph.random_regular(verteces=vector_ids, r=self._R)
 
         sigma = vector_ids
         random.shuffle(sigma)
@@ -116,12 +116,9 @@ class VamanaIndexer:
         for i in sigma:
             query_vector = self.vector_store.get(i)
             (_, V) = self.greedy_search(
-                entry_id=mediod_id, 
-                query_vector=query_vector, 
-                k=1,
-                L=self._L_build
+                entry_id=mediod_id, query_vector=query_vector, k=1, L=self._L_build
             )
-            
+
             self.robust_prune(source=i, candidates=V)
 
             query_neighbors = self.graph.get_neighbors(i)
@@ -141,18 +138,13 @@ class VamanaIndexer:
         # TODO: Use incremental updates instead of a full reindexing
         self.index()
 
-    def search(
-        self, query_vector: np.ndarray, k: int
-    ) -> List[Tuple[float, int]]:
+    def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if not self.entry_point:
             return []
 
         # TODO: In the future use Beam search instead
         results, _ = self.greedy_search(
-            entry_id=self.entry_point,
-            query_vector=query_vector,
-            k=k,
-            L=self._L_search
+            entry_id=self.entry_point, query_vector=query_vector, k=k, L=self._L_search
         )
 
         if not results:
@@ -171,21 +163,28 @@ class VamanaIndexer:
         return query_results
 
     def get_mediod(self) -> Optional[int]:
-        # TODO: Replace this function with an optimized vectorized version
         sample = self.vector_store.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
-        if len(sample) == 1: 
+        if not sample:
+            return None
+
+        if len(sample) == 1:
             return list(sample.keys())[0]
-        mediod = None
-        minimum = float("inf")
-        for i, x in sample.items():
-            for j, y in sample.items():
-                if i == j:
-                    continue
-                d = self.distance(x, y)
-                if d < minimum:
-                    minimum = d
-                    mediod = i
-        return mediod
+
+        ids = list(sample.keys())
+        vectors = np.array(list(sample.values()))
+
+        # calculcate pair-wise distances for each vector
+        distances = pdist(vectors, metric="euclidean")
+
+        distance_matrix = squareform(distances)
+
+        distance_sum = distance_matrix.sum(axis=1)
+
+        mediod = np.argmin(distance_sum)
+
+        medoid_id = ids[mediod]
+
+        return medoid_id
 
     @staticmethod
     def distance(x: np.ndarray, y: np.ndarray) -> float:
@@ -198,15 +197,12 @@ class VamanaIndexer:
 
     def load_index(self, repo: VectorDBRepository) -> None:
         self.vector_store = VectorStore.build_from_vectors(
-            vectors=repo.get_all_vectors_lite(), 
-            dims=self._dims
+            vectors=repo.get_all_vectors_lite(), dims=self._dims
         )
-        
+
         metadata = repo.get_index_metadata("entry_point")
         if not metadata:
             return
 
         self.entry_point = int(metadata)
         self.graph = Graph(repo.get_graph())
-
-

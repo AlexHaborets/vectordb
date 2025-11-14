@@ -20,6 +20,7 @@ class VectorStore:
         self.idx_to_dbid: Dict[int, int] = {}
 
         # Indeces in the vectors field of deleted vectors 
+        # TODO: update methods to use this field
         self.idxs: set[int]
 
     def get(self, vector_id: int) -> np.ndarray:

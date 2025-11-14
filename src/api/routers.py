@@ -27,9 +27,7 @@ def add(
         raise WrongVectorDimensionsError(dims)
     
     new_vector = VectorDBRepository(db).add_vector(vector)
-    request.app.state.logger.info("starting indexing")
     indexer.update(vector=VectorLite.from_vector(new_vector))
-    request.app.state.logger.info("finished indexing")
     return new_vector
 
 
@@ -83,7 +81,5 @@ def search(
 
 @search_router.post("/reindex")
 def reindex(request: Request, indexer: Annotated[VamanaIndexer, Depends(get_indexer)]) -> Dict[str, str]:    
-    request.app.state.logger.info("starting indexing")
     indexer.index()
-    request.app.state.logger.info("finished indexing")
     return {"message": "Reindexed successfully"}
