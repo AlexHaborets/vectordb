@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from src import config
-from src.api import vector_router, search_router
+from src.api import collection_router, vector_router, search_router
 from src.core import VamanaIndexer, VamanaConfig
 from src.db import session_manager, VectorDBRepository
 
@@ -51,6 +51,7 @@ app = FastAPI(title="Simple VectorDB", lifespan=lifespan)
 
 app.include_router(vector_router)
 app.include_router(search_router)
+app.include_router(collection_router)
 
 @app.exception_handler(HTTPException)
 def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -66,4 +67,4 @@ def root() -> dict[str, str]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app="src.main:app", host="0.0.0.0", reload=True, port=8000)
+    uvicorn.run(app=app, host="0.0.0.0", port=8000)

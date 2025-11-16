@@ -143,6 +143,31 @@ class VectorDBRepository:
         ).all()
 
         return list(vector_ids)
+    
+    def create_collection(self, collection: schemas.CollectionCreate) -> schemas.Collection:
+        new_collection = models.Collection(
+            name = collection.name,
+            dimension = collection.dimension
+        )
+        self.session.add(new_collection)
+        self.session.commit()
+        self.session.refresh(new_collection)
+        return schemas.Collection.model_validate(new_collection)
+
+    def get_all_collections(self) -> List[schemas.Collection]:
+        collections = (
+            self.session.query(models.Collection)
+            .all()
+        )
+        return [schemas.Collection.model_validate(c) for c in collections] 
+
+    def get_collection_by_name(self, name: str) -> Optional[schemas.Collection]:
+        collection = (
+            self.session.query(models.Collection)
+            .where(models.Collection.name == name)
+            .one_or_none()
+        )
+        return schemas.Collection.model_validate(collection) if collection else None
 
     def add_index_metadata(self, key: str, value: str):
         self.session.merge(models.IndexMetadata(

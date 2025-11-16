@@ -8,13 +8,13 @@ from src import config
 
 
 class SessionManager:
-    def __init__(self, url: str):
+    def __init__(self, url: str) -> None:
         if not url:
             raise ValueError("SessionManager requires database url.")
         self.engine = create_engine(url)
         self.sessionmaker = sessionmaker(bind=self.engine, expire_on_commit=False, autoflush=False)
 
-    def close(self):
+    def close(self) -> None:
         self.engine.dispose()
 
     @contextmanager

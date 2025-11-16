@@ -90,3 +90,15 @@ class SearchResult(BaseModel):
 class IndexMetadata(BaseModel):
     key: str
     value: str
+
+class CollectionCreate(BaseModel):
+    name: str
+    dimension: int
+
+class Collection(BaseModel):
+    id: int
+    name: str
+    dimension: int
+
+    class Config:
+        from_attributes = True
