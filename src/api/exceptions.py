@@ -12,9 +12,13 @@ class BaseAPIError(HTTPException):
 
 
 class VectorNotFoundError(BaseAPIError):
-    def __init__(self, vector_id: int):
+    def __init__(self, vector_id: int) -> None:
         super().__init__(status.HTTP_404_NOT_FOUND, f"Vector with id [{vector_id}] not found")
 
 class WrongVectorDimensionsError(BaseAPIError):
-    def __init__(self, vector_dims: int):
-        super().__init__(status.HTTP_404_NOT_FOUND, f"Wrong vector dimension ({vector_dims}) for index with dimension [{VECTOR_DIMENSIONS}]")
+    def __init__(self, vector_dims: int) -> None:
+        super().__init__(status.HTTP_400_BAD_REQUEST, f"Wrong vector dimension ({vector_dims}) for index with dimension [{VECTOR_DIMENSIONS}]")
+
+class CollectionNotFoundError(BaseAPIError):
+    def __init__(self, name: str) -> None:
+        super().__init__(status.HTTP_404_NOT_FOUND, detail=f"Collection '{name}' not found.")

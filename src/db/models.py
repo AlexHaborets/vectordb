@@ -43,10 +43,17 @@ class Vector(Base):
     __tablename__ = "vectors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), index=True
+    )
+
     vector_blob: Mapped[bytes] = mapped_column(BLOB, nullable=False)
     deleted: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
     )
+
+    collection: Mapped["Collection"] = relationship(back_populates="vectors")
 
     neighbors: Mapped[List["Vector"]] = relationship(
         "Vector",
@@ -87,6 +94,18 @@ class VectorMetadata(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    vectors: Mapped[List["Vector"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan"
+    )
 
 
 class IndexMetadata(Base):
