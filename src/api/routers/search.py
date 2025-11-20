@@ -3,10 +3,9 @@ from typing import Annotated, Dict, List
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from src import config
-from src.api.dependencies import get_db_session, get_indexer
-from src.core import VamanaIndexer
-from src.db.crud import VectorDBRepository
+from src.common import config
+from src.api.dependencies import get_indexer
+from src.engine import VamanaIndexer
 from src.schemas import Query, SearchResult, Vector
 
 search_router = APIRouter(prefix="/{collection_name}/search", tags=["search"])
@@ -35,13 +34,3 @@ def search(
             )
         )
     return results
-
-
-@search_router.post("/reindex")
-def reindex(
-    collection_name: str,
-    request: Request, 
-    indexer: Annotated[VamanaIndexer, Depends(get_indexer)]
-) -> Dict[str, str]:
-    indexer.index()
-    return {"message": "Reindexed successfully"}

@@ -5,13 +5,12 @@ from typing import List
 import numpy as np
 from pydantic import BaseModel, computed_field, field_validator
 
-from src import config
+from src.common import config
 
 
 class VectorMetadataBase(BaseModel):
     source_document: str
     content: str
-
 
 class VectorMetadataCreate(VectorMetadataBase):
     pass
@@ -31,7 +30,6 @@ class VectorBase(BaseModel):
 class VectorCreate(VectorBase):
     vector: List[float]
     vector_metadata: VectorMetadataCreate
-
 
 class Vector(VectorBase):
     id: int

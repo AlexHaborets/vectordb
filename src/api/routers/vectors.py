@@ -1,61 +1,48 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 
-from src import config
-from src.api.dependencies import get_db_session, get_indexer
-from src.api.exceptions import VectorNotFoundError, WrongVectorDimensionsError
-from src.core import VamanaIndexer
-from src.db.crud import VectorDBRepository
+from src.api.dependencies import get_indexer, get_uow
+from src.common.exceptions import VectorNotFoundError
+from src.engine import VamanaIndexer
+from src.db import UnitOfWork
 from src.schemas import Vector, VectorCreate, VectorLite
+from src.services import CollectionService
 
 vector_router = APIRouter(prefix="/{collection_name}/vectors", tags=["vectors"])
 
+collection_service = CollectionService()
 
 @vector_router.post("/", response_model=Vector, status_code=201)
 def add(
-    request: Request,
     collection_name: str,
     vector: VectorCreate,
-    db: Annotated[Session, Depends(get_db_session)],
+    uow: Annotated[UnitOfWork, Depends(get_uow)],
     indexer: Annotated[VamanaIndexer, Depends(get_indexer)],
 ) -> Vector:
-    if dims := len(vector.vector) != config.VECTOR_DIMENSIONS:
-        raise WrongVectorDimensionsError(dims)
-
-    new_vector = VectorDBRepository(db).add_vector(vector)
-    indexer.update(vector=VectorLite.from_vector(new_vector))
-    return new_vector
+    vector_db = collection_service.add_vector(collection_name, vector, uow)
+    indexer.update(VectorLite.from_vector(vector_db))
+    return vector_db
 
 
 @vector_router.get("/", response_model=Vector)
 def get_by_id(
-    collection_name: str,
-    vector_id: int, 
-    db: Annotated[Session, Depends(get_db_session)]
+    collection_name: str, vector_id: int, uow: Annotated[UnitOfWork, Depends(get_uow)]
 ) -> Vector:
-    vector = VectorDBRepository(db).get_vector_by_id(vector_id)
-    if not vector:
-        raise VectorNotFoundError(vector_id)
-    return vector
+    return collection_service.get_vector(collection_name, vector_id, uow)
 
 
 @vector_router.get("/all", response_model=List[Vector])
 def get_all(
-    collection_name: str,
-    db: Annotated[Session, Depends(get_db_session)]
+    collection_name: str, uow: Annotated[UnitOfWork, Depends(get_uow)]
 ) -> List[Vector]:
-    return VectorDBRepository(db).get_all_vectors()
+    return collection_service.get_all_vectors(collection_name, uow)
 
 
 @vector_router.delete("/", response_model=Vector, status_code=201)
 def delete_by_id(
     collection_name: str,
-    vector_id: int, 
-    db: Annotated[Session, Depends(get_db_session)]
+    vector_id: int,
+    uow: Annotated[UnitOfWork, Depends(get_uow)],
 ) -> Vector:
-    vector = VectorDBRepository(db).mark_vector_deleted(vector_id)
-    if not vector:
-        raise VectorNotFoundError(vector_id)
-    return vector
+    return collection_service.delete_vector(collection_name, vector_id, uow)
