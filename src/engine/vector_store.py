@@ -1,7 +1,7 @@
 import random
 from typing import Dict, List
 
-from src import config
+from src.common import config
 from src.schemas import VectorLite
 import numpy as np
 

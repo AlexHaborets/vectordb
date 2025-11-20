@@ -1,35 +1,31 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 
-from src.api.dependencies import get_db_session
-from src.api.exceptions import CollectionNotFoundError
-from src.db.crud import VectorDBRepository
+from src.api.dependencies import get_uow
+from src.db import UnitOfWork
 from src.schemas import Collection, CollectionCreate
-
+from src.services.collection import CollectionService
 
 collection_router = APIRouter(prefix="/collections", tags=["collections"])
 
-
+collection_service = CollectionService()
 
 @collection_router.post("/", response_model=Collection, status_code=201)
 def add(
-    request: Request,
     collection: CollectionCreate,
-    db: Annotated[Session, Depends(get_db_session)],
+    uow: Annotated[UnitOfWork, Depends(get_uow)],
 ) -> Collection:
-    return VectorDBRepository(db).create_collection(collection)
+    return collection_service.create_collection(collection, uow)
 
 
 @collection_router.get("/all", response_model=List[Collection])
-def get_all(db: Annotated[Session, Depends(get_db_session)]) -> List[Collection]:
-    return VectorDBRepository(db).get_all_collections()
+def get_all(uow: Annotated[UnitOfWork, Depends(get_uow)]) -> List[Collection]:
+    return collection_service.get_all_collections(uow)
 
 
 @collection_router.get("/{collection_name}", response_model=Collection)
-def get_collection(collection_name: str, db: Annotated[Session, Depends(get_db_session)]):
-    collection = VectorDBRepository(db).get_collection_by_name(collection_name)
-    if not collection:
-        raise CollectionNotFoundError(collection_name)
-    return collection
+def get_collection(
+    collection_name: str, uow: Annotated[UnitOfWork, Depends(get_uow)]
+) -> Collection:
+    return collection_service.get_collection_by_name(collection_name, uow)

@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import Session
 
-from src import config
+from src.common import config
 
 
 class SessionManager:
@@ -14,20 +14,11 @@ class SessionManager:
         self.engine = create_engine(url)
         self.sessionmaker = sessionmaker(bind=self.engine, expire_on_commit=False, autoflush=False)
 
+    def get_session_factory(self) -> sessionmaker:
+        return self.sessionmaker
+    
     def close(self) -> None:
         self.engine.dispose()
-
-    @contextmanager
-    def get_session(self) -> Generator[Session, Any, None]:
-        session = self.sessionmaker()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
 
 if not config.DATABASE_URL:
     raise ValueError("DATABASE_URL env variable is missing")

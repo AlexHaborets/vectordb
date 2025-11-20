@@ -5,10 +5,10 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
-from src import config
-from src.core.graph import Graph
-from src.core.vector_store import VectorStore
-from src.db.crud import VectorDBRepository
+from src.common import config
+from src.db import UnitOfWork
+from src.engine.graph import Graph
+from src.engine.vector_store import VectorStore
 from src.schemas import VectorLite
 from dataclasses import dataclass
 
@@ -190,12 +190,12 @@ class VamanaIndexer:
     def distance(x: np.ndarray, y: np.ndarray) -> float:
         return float(np.linalg.norm(x - y))
 
-    def save_index(self, repo: VectorDBRepository) -> None:
+    def save_index(self, uow: UnitOfWork) -> None:
         if self.entry_point:
-            repo.save_graph(self.graph.graph)
-            repo.add_index_metadata("entry_point", str(self.entry_point))
+            uow.vectors.save_graph(self.graph.graph)
+            uow.vectors.add_index_metadata("entry_point", str(self.entry_point))
 
-    def load_index(self, repo: VectorDBRepository) -> None:
+    def load_index(self, uow: UnitOfWork) -> None:
         self.vector_store = VectorStore.build_from_vectors(
             vectors=repo.get_all_vectors_lite(), dims=self._dims
         )

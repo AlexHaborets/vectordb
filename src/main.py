@@ -4,9 +4,9 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from src import config
+from src.common import config
 from src.api import collection_router, vector_router, search_router
-from src.core import VamanaIndexer, VamanaConfig
+from src.engine import VamanaIndexer, VamanaConfig
 from src.db import session_manager, VectorDBRepository
 
 logging.basicConfig(
