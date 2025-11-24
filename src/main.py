@@ -13,30 +13,22 @@ from src.common.exceptions import (
 from src.db import session_manager
 from src.db.uow import DBUnitOfWork
 from src.api.dependencies import get_indexer_manager
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s (%(name)s): %(message)s",
-    datefmt="%H:%M:%S",
-)
-
-logger = logging.getLogger(__name__)
-
+from src.common.logger import setup_logger
+from loguru import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.logger = logger
-
-    app.state.logger.info("Starting vector db...")
-
+    setup_logger()
+    
+    logger.info("Starting vector db...")
     
     yield
-    app.state.logger.info("Shutting down vector db...")
+    logger.info("Shutting down vector db...")
 
     uow = DBUnitOfWork(session_manager.sessionmaker)
 
     with uow:
-        app.state.logger.info("Saving indexes to disk...")
+        logger.info("Saving indexes to disk...")
         get_indexer_manager().save_all(uow)
 
     session_manager.close()
