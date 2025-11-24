@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List
 
 import numpy as np
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, field_validator
 
 from src.common import config
 
@@ -11,6 +11,7 @@ from src.common import config
 class VectorMetadataBase(BaseModel):
     source_document: str
     content: str
+
 
 class VectorMetadataCreate(VectorMetadataBase):
     pass
@@ -31,6 +32,7 @@ class VectorCreate(VectorBase):
     vector: List[float]
     vector_metadata: VectorMetadataCreate
 
+
 class Vector(VectorBase):
     id: int
     vector: List[float]
@@ -46,16 +48,6 @@ class Vector(VectorBase):
     class Config:
         from_attributes = True
 
-class Query(BaseModel):
-    vector: List[float]
-
-    @computed_field
-    @property
-    def numpy_vector(self) -> np.ndarray:
-        return np.array(self.vector, dtype=config.NUMPY_DTYPE)
-    
-    class Config:
-        arbitrary_types_allowed = True
 
 class VectorLite(VectorBase):
     id: int
@@ -68,35 +60,13 @@ class VectorLite(VectorBase):
         if not isinstance(other, VectorLite):
             return NotImplemented
         return self.id == other.id
-    
+
     @classmethod
     def from_vector(cls, vector: Vector) -> "VectorLite":
         return cls(
-            id = vector.id, 
-            numpy_vector=np.array(vector.vector, dtype=config.NUMPY_DTYPE)
+            id=vector.id, numpy_vector=np.array(vector.vector, dtype=config.NUMPY_DTYPE)
         )
 
     class Config:
         from_attributes = True
         arbitrary_types_allowed = True
-
-
-class SearchResult(BaseModel):
-    score: float
-    vector: Vector
-
-class IndexMetadata(BaseModel):
-    key: str
-    value: str
-
-class CollectionCreate(BaseModel):
-    name: str
-    dimension: int
-
-class Collection(BaseModel):
-    id: int
-    name: str
-    dimension: int
-
-    class Config:
-        from_attributes = True
