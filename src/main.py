@@ -1,27 +1,27 @@
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from loguru import logger
 
 from src.api import collection_router, search_router, vector_router
+from src.api.dependencies import get_indexer_manager
 from src.api.exception_handlers import create_exception_handler
 from src.common.exceptions import (
     DuplicateEntityError,
     EntityNotFoundError,
     InvalidOperationError,
 )
+from src.common.logger import setup_logger
 from src.db import session_manager
 from src.db.uow import DBUnitOfWork
-from src.api.dependencies import get_indexer_manager
-from src.common.logger import setup_logger
-from loguru import logger
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logger()
-    
+
     logger.info("Starting vector db...")
-    
+
     yield
     logger.info("Shutting down vector db...")
 
@@ -51,6 +51,7 @@ app.add_exception_handler(
 app.add_exception_handler(
     InvalidOperationError, create_exception_handler(status_code=400)
 )
+
 
 @app.get("/")
 def root() -> dict[str, str]:
