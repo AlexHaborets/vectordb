@@ -33,3 +33,15 @@ class CollectionRepository:
         self.session.commit()
         self.session.refresh(new_collection)
         return new_collection
+    
+    def add_index_metadata(self, collection_id: int, key: str, value: str) -> None:
+        self.session.merge(models.IndexMetadata(
+            collection_id = collection_id,
+            key = key,
+            value = value
+        ))
+        self.session.commit()
+
+    def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
+        metadata = self.session.get(models.IndexMetadata, (collection_id, key))
+        return metadata.value if metadata else None

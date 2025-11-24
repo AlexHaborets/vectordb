@@ -6,9 +6,8 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
 from src.common import config
-from src.db import UnitOfWork
-from src.engine.graph import Graph
-from src.engine.vector_store import VectorStore
+from src.engine.structures.graph import Graph
+from src.engine.structures.vector_store import VectorStore
 from src.schemas import VectorLite
 from dataclasses import dataclass
 
@@ -16,17 +15,23 @@ from dataclasses import dataclass
 @dataclass
 class VamanaConfig:
     dims: int
-    alpha: float
-    L_build: int
-    L_search: int
-    R: int
+    alpha: float = 1.2
+    L_build: int = 64
+    L_search: int = 100
+    R: int = 32
 
 
 class VamanaIndexer:
-    def __init__(self, config: VamanaConfig) -> None:
-        self.graph: Graph
-        self.entry_point: int
-        self.vector_store: VectorStore
+    def __init__(
+            self, 
+            config: VamanaConfig, 
+            vector_store: VectorStore, 
+            graph: Optional[Graph] = None,
+            entry_point: Optional[int] = None
+    ) -> None:
+        self.graph = graph if graph else Graph()
+        self.entry_point = entry_point
+        self.vector_store = vector_store
 
         # Indexing/search parameters
         self._dims = config.dims
@@ -189,20 +194,3 @@ class VamanaIndexer:
     @staticmethod
     def distance(x: np.ndarray, y: np.ndarray) -> float:
         return float(np.linalg.norm(x - y))
-
-    def save_index(self, uow: UnitOfWork) -> None:
-        if self.entry_point:
-            uow.vectors.save_graph(self.graph.graph)
-            uow.vectors.add_index_metadata("entry_point", str(self.entry_point))
-
-    def load_index(self, uow: UnitOfWork) -> None:
-        self.vector_store = VectorStore.build_from_vectors(
-            vectors=repo.get_all_vectors_lite(), dims=self._dims
-        )
-
-        metadata = repo.get_index_metadata("entry_point")
-        if not metadata:
-            return
-
-        self.entry_point = int(metadata)
-        self.graph = Graph(repo.get_graph())

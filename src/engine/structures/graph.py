@@ -3,7 +3,7 @@ from typing import Dict, List
 
 
 class Graph:
-    def __init__(self, graph: Dict[int, List[int]]) -> None:
+    def __init__(self, graph: Dict[int, List[int]] = {}) -> None:
         self.graph = graph
 
     @classmethod

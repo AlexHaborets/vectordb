@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from src.config import NUMPY_DTYPE
+from src.common.config import NUMPY_DTYPE
 
 
 class Base(DeclarativeBase):
@@ -36,6 +36,13 @@ graph_association_table = Table(
         ForeignKey("vectors.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Column(
+        "collection_id",
+        Integer,
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True, 
+    )
 )
 
 
@@ -106,11 +113,16 @@ class Collection(Base):
     vectors: Mapped[List["Vector"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
-
+                
 
 class IndexMetadata(Base):
     # A helper key-value store
     __tablename__ = "index_metadata"
+
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), 
+        primary_key=True
+    )
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(String, nullable=False)

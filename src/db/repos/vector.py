@@ -1,12 +1,11 @@
+from collections import defaultdict
 from typing import Dict, List, Optional
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
 import src.schemas as schemas
-
 
 class VectorRepository:
     def __init__(self, session: Session) -> None:
@@ -61,9 +60,9 @@ class VectorRepository:
         new_vector = models.Vector(
             vector_metadata=models.VectorMetadata(
                 source_document=vector.vector_metadata.source_document,
-                collection_id=collection_id,
                 content=vector.vector_metadata.content,
             ),
+            collection_id=collection_id,
             vector=vector.vector,
         )
         self.session.add(new_vector)
@@ -79,40 +78,51 @@ class VectorRepository:
             self.session.refresh(vector)
         return vector
 
-    def get_graph(self) -> Dict[int, List[int]]:
-        vectors = (
-            self.session.query(models.Vector)
-            .options(selectinload(models.Vector.neighbors))
-            .filter(models.Vector.deleted == False)  # noqa: E712
-            .all()
-        )
-        graph = {v.id: [neighbor.id for neighbor in v.neighbors]
-                 for v in vectors}
+    def get_graph(self, collection_id: int) -> Dict[int, List[int]]:
+        edges = self.session.execute(
+            select(
+                models.graph_association_table.c.source_id,
+                models.graph_association_table.c.neighbor_id
+            ).where(
+                models.graph_association_table.c.collection_id == collection_id 
+            )
+        ).all()
+
+        graph = defaultdict(list)
+        for source, neighbor in edges:
+            graph[source].append(neighbor)
         return graph
 
-    def save_graph(self, graph: Dict[int, List[int]]) -> None:
-        self.session.execute(models.graph_association_table.delete())
+    def save_graph(self, collection_id: int, graph: Dict[int, List[int]]) -> None:
+        self.session.execute(
+            models.graph_association_table.delete()
+            .where(
+                models.graph_association_table.c.collection_id == collection_id
+            )
+        )
         self.session.flush()
 
         if not graph:
             self.session.commit()
             return
         
-        all_vector_ids = set(graph.keys())
-        for neighbors in graph.values():
-            all_vector_ids.update(neighbors)
+        edges = [
+            {
+                "source_id": src, 
+                "neighbor_id": nbr, 
+                "collection_id": collection_id
+            }
+            for src, neighbors in graph.items()
+            for nbr in neighbors
+        ]
+
+        if not edges:
+            return 
         
-        vectors_in_db = self.session.query(models.Vector).filter(
-            models.Vector.id.in_(list(all_vector_ids))
-        ).all()
-
-        vector_map = {v.id: v for v in vectors_in_db}
-
-        for vector_id, neighbor_ids in graph.items():
-            vector = vector_map.get(vector_id)
-            if not vector:
-                continue
-            vector.neighbors = [vector_map[n_id] for n_id in neighbor_ids if n_id in vector_map]
+        self.session.execute(
+            models.graph_association_table.insert()
+            .values(edges) 
+        )
 
         self.session.commit()
 
@@ -123,14 +133,3 @@ class VectorRepository:
         ).all()
 
         return list(vector_ids)
-
-    def add_index_metadata(self, key: str, value: str):
-        self.session.merge(models.IndexMetadata(
-            key = key,
-            value = value
-        ))
-        self.session.commit()
-
-    def get_index_metadata(self, key: str) -> Optional[str]:
-        metadata = self.session.get(models.IndexMetadata, key)
-        return metadata.value if metadata else None

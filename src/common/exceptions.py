@@ -1,17 +1,40 @@
 from src.common.config import VECTOR_DIMENSIONS
 
-class VectorNotFoundError(Exception):
-    def __init__(self, vector_id: int) -> None:
-        super().__init__(f"Vector with id [{vector_id}] not found")
 
-class WrongVectorDimensionsError(Exception):
-    def __init__(self, vector_dims: int) -> None:
-        super().__init__(f"Wrong vector dimension ({vector_dims}) for index with dimension [{VECTOR_DIMENSIONS}]")
+class VectorDBError(Exception):
+    # Base class for all errors
+    pass
 
-class CollectionNotFoundError(Exception):
+
+class EntityNotFoundError(VectorDBError):
+    pass
+
+
+class CollectionNotFoundError(EntityNotFoundError):
     def __init__(self, name: str) -> None:
         super().__init__(f"Collection '{name}' not found.")
 
-class CollectionAlreadyExistsError(Exception):
+
+class VectorNotFoundError(EntityNotFoundError):
+    def __init__(self, vector_id: int) -> None:
+        super().__init__(f"Vector with id {vector_id} not found")
+
+
+class DuplicateEntityError(VectorDBError):
+    pass
+
+
+class CollectionAlreadyExistsError(DuplicateEntityError):
     def __init__(self, name: str) -> None:
         super().__init__(f"Collection '{name}' already exists.")
+
+
+class InvalidOperationError(VectorDBError):
+    pass
+
+
+class WrongVectorDimensionsError(InvalidOperationError):
+    def __init__(self, vector_dims: int) -> None:
+        super().__init__(
+            f"Wrong vector dimension ({vector_dims}) for index with dimension {VECTOR_DIMENSIONS}"
+        )
