@@ -1,7 +1,6 @@
-from typing import List, Optional
+from typing import List
 from src.common.exceptions import CollectionAlreadyExistsError, CollectionNotFoundError, VectorNotFoundError, WrongVectorDimensionsError
 from src.db import UnitOfWork
-from src.db.models import Vector
 from src.schemas import Collection, CollectionCreate, Vector, VectorCreate
 
 

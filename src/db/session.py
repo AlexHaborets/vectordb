@@ -1,8 +1,5 @@
-from contextlib import contextmanager
-from typing import Any, Generator
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from sqlalchemy.orm.session import Session
 
 from src.common import config
 

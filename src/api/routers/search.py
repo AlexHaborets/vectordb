@@ -1,36 +1,31 @@
-from typing import Annotated, Dict, List
+from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 
-from src.common import config
-from src.api.dependencies import get_indexer
-from src.engine import VamanaIndexer
-from src.schemas import Query, SearchResult, Vector
+from src.api.dependencies import get_indexer_manager, get_uow
+from src.db import UnitOfWork
+from src.engine import IndexerManager
+from src.schemas import Query, SearchResult
+from src.services import SearchService
 
 search_router = APIRouter(prefix="/{collection_name}/search", tags=["search"])
 
+search_service = SearchService()
 
 @search_router.post("/", response_model=List[SearchResult])
 def search(
     collection_name: str,
     q: Query,
     k: int,
-    db: Annotated[Session, Depends(get_db_session)],
-    indexer: Annotated[VamanaIndexer, Depends(get_indexer)],
+    uow: Annotated[UnitOfWork, Depends(get_uow)],
+    indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[SearchResult]:
-    query_results = indexer.search(q.numpy_vector, k)
-    vectors = VectorDBRepository(db).get_vectors_by_ids(
-        [result[1] for result in query_results]
-    )
-    id_to_vector: Dict[int, Vector] = {v.id: v for v in vectors}
-
-    results: List[SearchResult] = []
-    for score, vector_id in query_results:
-        results.append(
-            SearchResult(
-                score=round(score, config.SIMILARITY_SCORE_PRECISION),
-                vector=id_to_vector[vector_id],
-            )
+    with uow:
+        return search_service.search(
+            collection_name=collection_name,
+            query=q,
+            k=k,
+            indexer_manager=indexer_manager,
+            uow=uow
         )
-    return results
+

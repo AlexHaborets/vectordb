@@ -1,12 +1,13 @@
 from typing import Any, Generator
-from fastapi import Request
 
-from src.engine import VamanaIndexer
 from src.db import session_manager
 from src.db.uow import DBUnitOfWork, UnitOfWork
+from src.engine.indexer_manager import IndexerManager
 
-def get_indexer(request: Request) -> VamanaIndexer:
-    return request.app.state.indexer
+_indexer_manager = IndexerManager()
+
+def get_indexer_manager() -> IndexerManager:
+    return _indexer_manager
 
 def get_uow() -> Generator[UnitOfWork, Any, None]:
     uow =  DBUnitOfWork(session_manager.get_session_factory())
