@@ -8,7 +8,7 @@ from src.engine import IndexerManager
 from src.schemas import Query, SearchResult
 from src.services import SearchService
 
-search_router = APIRouter(prefix="/{collection_name}/search", tags=["search"])
+search_router = APIRouter(prefix="/collections/{collection_name}/search", tags=["search"])
 
 search_service = SearchService()
 
@@ -16,7 +16,6 @@ search_service = SearchService()
 def search(
     collection_name: str,
     q: Query,
-    k: int,
     uow: Annotated[UnitOfWork, Depends(get_uow)],
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[SearchResult]:
@@ -24,7 +23,6 @@ def search(
         return search_service.search(
             collection_name=collection_name,
             query=q,
-            k=k,
             indexer_manager=indexer_manager,
             uow=uow
         )

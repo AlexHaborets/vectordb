@@ -8,7 +8,7 @@ from scipy.spatial.distance import pdist, squareform
 from src.common import config
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from src.schemas import VectorLite
+from src.schemas import Vector, VectorLite
 from dataclasses import dataclass
 
 
@@ -138,8 +138,8 @@ class VamanaIndexer:
 
         self.entry_point = mediod_id
 
-    def update(self, vector: VectorLite) -> None:
-        self.vector_store.add(vector)
+    def update(self, vector: Vector) -> None:
+        self.vector_store.add(VectorLite.from_vector(vector))
         # TODO: Use incremental updates instead of a full reindexing
         self.index()
 

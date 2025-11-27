@@ -4,7 +4,7 @@ from src.common import config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
 from src.engine.indexer_manager import IndexerManager
-from src.schemas import Query, SearchResult, VectorLite
+from src.schemas import Query, SearchResult, Vector
 
 class SearchService:
     def __init__(self) -> None:
@@ -14,12 +14,11 @@ class SearchService:
         self, 
         collection_name: str,
         query: Query,
-        k: int,
         indexer_manager: IndexerManager,
         uow: UnitOfWork
     ) -> List[SearchResult]:
         indexer = indexer_manager.get_indexer(collection_name, uow)
-        query_results = indexer.search(query.numpy_vector, k)
+        query_results = indexer.search(query.numpy_vector, query.k)
         collection = uow.collections.get_collection_by_name(collection_name)
         if not collection:
             raise CollectionNotFoundError(collection_name)
@@ -42,7 +41,7 @@ class SearchService:
     def update(
         self, 
         collection_name: str,
-        vector: VectorLite,
+        vector: Vector,
         indexer_manager: IndexerManager,
         uow: UnitOfWork
     ) -> None:
