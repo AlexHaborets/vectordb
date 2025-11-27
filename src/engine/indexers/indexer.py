@@ -1,5 +1,15 @@
-# from abc import ABC
+from abc import ABC, abstractmethod
+from typing import List, Tuple
 
-# class Indexer(ABC):
-#      @abc.abstractmethod
-#      def index()
+import numpy as np
+
+class Indexer(ABC):
+    @abstractmethod
+    def index() -> None:
+        pass
+     
+    @abstractmethod
+    def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
+        pass
+     
+

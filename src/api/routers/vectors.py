@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends
 from src.api.dependencies import get_indexer_manager, get_uow
 from src.db import UnitOfWork
 from src.engine import IndexerManager
-from src.schemas import Vector, VectorCreate, VectorLite
+from src.schemas import Vector, VectorCreate
 from src.services import CollectionService, SearchService
 
-vector_router = APIRouter(prefix="/{collection_name}/vectors", tags=["vectors"])
+vector_router = APIRouter(prefix="/collections/{collection_name}/vectors", tags=["vectors"])
 
 collection_service = CollectionService()
 search_service = SearchService()
@@ -24,7 +24,7 @@ def add(
         vector_db = collection_service.add_vector(collection_name, vector, uow)
         search_service.update(
             collection_name=collection_name,
-            vector=VectorLite.from_vector(vector_db),
+            vector=vector_db,
             indexer_manager=indexer_manager,
             uow=uow
         )

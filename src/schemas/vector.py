@@ -18,8 +18,6 @@ class VectorMetadataCreate(VectorMetadataBase):
 
 
 class VectorMetadata(VectorMetadataBase):
-    vector_id: int
-
     class Config:
         from_attributes = True
 

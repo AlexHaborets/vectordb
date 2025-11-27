@@ -10,6 +10,7 @@ from src.schemas.vector import Vector
 
 class Query(BaseModel):
     vector: List[float]
+    k: int
 
     @computed_field
     @property
