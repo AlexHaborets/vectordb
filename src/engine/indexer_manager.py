@@ -18,6 +18,10 @@ class IndexerManager:
         indexer = self._load_from_db(collection_name, uow)
         self._indexers[collection_name] = indexer
         return indexer
+
+    def remove_indexer(self, collection_name: str, uow: UnitOfWork):
+        if collection_name in self._indexers:
+            del self._indexers[collection_name]
         
     def _load_from_db(self,collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)

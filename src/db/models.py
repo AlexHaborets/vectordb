@@ -113,7 +113,13 @@ class Collection(Base):
     vectors: Mapped[List["Vector"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
-                
+    
+    index_metadata: Mapped[List["IndexMetadata"]] = relationship(
+        "IndexMetadata",
+        back_populates="collection",
+        cascade="all, delete-orphan"
+    )
+
 
 class IndexMetadata(Base):
     # A helper key-value store
@@ -126,3 +132,8 @@ class IndexMetadata(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(String, nullable=False)
+
+    collection: Mapped["Collection"] = relationship(
+        "Collection",
+        back_populates="index_metadata"
+    )

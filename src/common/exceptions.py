@@ -1,6 +1,3 @@
-from src.common.config import VECTOR_DIMENSIONS
-
-
 class VectorDBError(Exception):
     # Base class for all errors
     pass
@@ -34,7 +31,7 @@ class InvalidOperationError(VectorDBError):
 
 
 class WrongVectorDimensionsError(InvalidOperationError):
-    def __init__(self, vector_dims: int) -> None:
+    def __init__(self, actual_dims: int, expected_dims: int) -> None:
         super().__init__(
-            f"Wrong vector dimension ({vector_dims}) for index with dimension {VECTOR_DIMENSIONS}"
+            f"Wrong vector dimension ({actual_dims}) for index with dimension {expected_dims}"
         )

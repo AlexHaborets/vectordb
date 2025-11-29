@@ -1,0 +1,3 @@
+DEFAULT_HOST = "localhost:8000"
+
+DEFAULT_DB_URL = f"http://{DEFAULT_HOST}"
