@@ -15,12 +15,13 @@ class CollectionRepository:
             .all()
         )
 
-    def get_collection_by_name(self, name: str) -> Optional[models.Collection]:
+    def get_collection_by_name(self, collection_name: str) -> Optional[models.Collection]:
         return (
             self.session.query(models.Collection)
-            .where(models.Collection.name == name)
+            .where(models.Collection.name == collection_name)
             .one_or_none()
         )
+    
     
     def create_collection(self, collection: schemas.CollectionCreate) -> Optional[models.Collection]:
         if self.get_collection_by_name(collection.name):
@@ -33,6 +34,15 @@ class CollectionRepository:
         self.session.commit()
         self.session.refresh(new_collection)
         return new_collection
+    
+    def delete_collection(self, collection_name: str) -> bool:
+        collection = self.get_collection_by_name(collection_name)
+        if not collection:
+            return False
+        self.session.delete(collection)
+        self.session.commit()
+        return True
+
     
     def add_index_metadata(self, collection_id: int, key: str, value: str) -> None:
         self.session.merge(models.IndexMetadata(

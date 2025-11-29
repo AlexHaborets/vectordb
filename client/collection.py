@@ -1,7 +1,7 @@
 from typing import List
 
-from sdk.models import Query, SearchResult, Vector, VectorMetadata, VectorResponse
-from sdk.transport import Transport
+from client.models import Query, SearchResult, Vector, VectorMetadata, VectorResponse
+from client.transport import Transport
 
 
 class Collection:
@@ -28,3 +28,7 @@ class Collection:
         response = self._transport.post(path=path, json=payload.model_dump())
         return [SearchResult.model_validate(item) for item in response]
     
+    def get(self, vector_id: int) -> VectorResponse:
+        path = f"/collections/{self.name}/vectors/?vector_id={vector_id}"
+        response = self._transport.post(path=path)
+        return VectorResponse.model_validate(response)    

@@ -39,7 +39,7 @@ def get_by_id(
         return collection_service.get_vector(collection_name, vector_id, uow)
 
 
-@vector_router.get("/all", response_model=List[Vector])
+@vector_router.get("/", response_model=List[Vector])
 def get_all(
     collection_name: str, uow: Annotated[UnitOfWork, Depends(get_uow)]
 ) -> List[Vector]:

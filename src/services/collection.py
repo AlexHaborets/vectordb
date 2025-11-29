@@ -1,6 +1,7 @@
 from typing import List
 from src.common.exceptions import CollectionAlreadyExistsError, CollectionNotFoundError, VectorNotFoundError, WrongVectorDimensionsError
 from src.db import UnitOfWork
+from src.engine import IndexerManager
 from src.schemas import Collection, CollectionCreate, Vector, VectorCreate
 
 
@@ -13,6 +14,12 @@ class CollectionService():
         if not collection:
             raise CollectionAlreadyExistsError(collection_data.name)
         return Collection.model_validate(collection)
+    
+    def delete_collection(self, collection_name: str, indexer_manager: IndexerManager, uow: UnitOfWork) -> None:
+        success = uow.collections.delete_collection(collection_name=collection_name)
+        if not success:
+            raise CollectionNotFoundError(collection_name)
+        indexer_manager.remove_indexer(collection_name, uow)
     
     def get_all_collections(self, uow: UnitOfWork) -> List[Collection]:
         collections = uow.collections.get_all_collections()
@@ -28,7 +35,7 @@ class CollectionService():
         collection = self.get_collection_by_name(collection_name, uow)
         
         if dims := len(vector.vector) != collection.dimension:
-            raise WrongVectorDimensionsError(dims)
+            raise WrongVectorDimensionsError(dims, collection.dimension)
         
         db_vector = uow.vectors.add_vector(collection.id, vector)
         return Vector.model_validate(db_vector)

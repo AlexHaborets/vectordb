@@ -193,4 +193,12 @@ class VamanaIndexer:
 
     @staticmethod
     def distance(x: np.ndarray, y: np.ndarray) -> float:
-        return float(np.linalg.norm(x - y))
+        dot_product = np.dot(x, y)
+        norm_x = np.linalg.norm(x)
+        norm_y = np.linalg.norm(y)
+
+        if norm_x == 0 or norm_y == 0:
+            return 1.0
+        similarity = dot_product / (norm_x * norm_y)
+
+        return 1.0 - similarity
