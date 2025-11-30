@@ -3,16 +3,20 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from src.common.metrics import MetricType
 
-class CollectionCreate(BaseModel):
+
+class CollectionBase(BaseModel):
     name: str
     dimension: int
+    metric: MetricType
+
+class CollectionCreate(CollectionBase):
+    pass
 
 
-class Collection(BaseModel):
+class Collection(CollectionBase):
     id: int
-    name: str
-    dimension: int
 
     class Config:
         from_attributes = True

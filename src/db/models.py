@@ -6,6 +6,7 @@ from sqlalchemy import (
     BLOB,
     Boolean,
     Column,
+    Enum,
     ForeignKey,
     Integer,
     String,
@@ -15,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.common.config import NUMPY_DTYPE
+from src.common.metrics import MetricType
 
 
 class Base(DeclarativeBase):
@@ -109,6 +111,11 @@ class Collection(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    metric: Mapped[MetricType] = mapped_column(
+        Enum(MetricType), 
+        default=MetricType.COSINE,
+        nullable=False
+    )
 
     vectors: Mapped[List["Vector"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
