@@ -6,6 +6,7 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
 from src.common import config
+from src.common.metrics import MetricType, get_metric
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
 from src.schemas import Vector, VectorLite
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 @dataclass
 class VamanaConfig:
     dims: int
+    metric: MetricType
     alpha: float = 1.2
     L_build: int = 64
     L_search: int = 100
@@ -39,6 +41,8 @@ class VamanaIndexer:
         self._L_build = config.L_build
         self._L_search = config.L_search
         self._R = config.R
+        self._metric = MetricType(config.metric) 
+        self._distance = get_metric(config.metric)
 
     def greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
@@ -54,7 +58,7 @@ class VamanaIndexer:
 
         def distance_fn(id: int) -> float:
             p = self.vector_store.get(id)
-            return self.distance(p, query_vector)
+            return self._distance(p, query_vector)
 
         while candidates - visited:
             p_star = min(candidates - visited, key=distance_fn)
@@ -83,7 +87,7 @@ class VamanaIndexer:
 
         def distance_fn(id: int) -> float:
             p = self.vector_store.get(id)
-            return self.distance(p, source_vector)
+            return self._distance(p, source_vector)
 
         while candidates:
             p_star = min(candidates, key=distance_fn)
@@ -96,9 +100,9 @@ class VamanaIndexer:
             p_star_vector = self.vector_store.get(p_star)
             for other in candidates:
                 other_vector = self.vector_store.get(other)
-                if self._alpha * self.distance(
+                if self._alpha * self._distance(
                     p_star_vector, other_vector
-                ) <= self.distance(source_vector, other_vector):
+                ) <= self._distance(source_vector, other_vector):
                     to_prune.append(other)
 
             for vector in to_prune:
@@ -156,7 +160,7 @@ class VamanaIndexer:
             return []
 
         def get_score(vec: np.ndarray) -> float:
-            distance = self.distance(vec, query_vector)
+            distance = self._distance(vec, query_vector)
             return 1 / (1 + distance)
 
         result_vectors = self.vector_store.get_batch(results)
@@ -179,7 +183,7 @@ class VamanaIndexer:
         vectors = np.array(list(sample.values()))
 
         # calculcate pair-wise distances for each vector
-        distances = pdist(vectors, metric="euclidean")
+        distances = pdist(vectors, metric=self._metric.value) # type: ignore
 
         distance_matrix = squareform(distances)
 
@@ -190,15 +194,3 @@ class VamanaIndexer:
         medoid_id = ids[mediod]
 
         return medoid_id
-
-    @staticmethod
-    def distance(x: np.ndarray, y: np.ndarray) -> float:
-        dot_product = np.dot(x, y)
-        norm_x = np.linalg.norm(x)
-        norm_y = np.linalg.norm(y)
-
-        if norm_x == 0 or norm_y == 0:
-            return 1.0
-        similarity = dot_product / (norm_x * norm_y)
-
-        return 1.0 - similarity

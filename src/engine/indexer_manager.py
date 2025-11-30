@@ -32,6 +32,7 @@ class IndexerManager:
         graph = Graph(graph=graph_in_db) if graph_in_db else None 
         
         vamana_config = VamanaConfig(
+            metric=collection.metric,
             dims=collection.dimension,
             alpha=config.VAMANA_ALPHA,
             L_build=config.VAMANA_L_BUILD,
@@ -43,7 +44,10 @@ class IndexerManager:
         vectors = [VectorLite.model_validate(v) for v in vectors_in_db]
         vector_store = VectorStore.build_from_vectors(vectors=vectors, dims=collection.dimension) 
 
-        entry_point_in_db = uow.collections.get_index_metadata(collection_id=collection.id, key="entry_point") 
+        entry_point_in_db = uow.collections.get_index_metadata(
+            collection_id=collection.id, 
+            key="entry_point"
+        ) 
         entry_point = int(entry_point_in_db) if entry_point_in_db else None
 
         indexer = VamanaIndexer(
@@ -69,7 +73,7 @@ class IndexerManager:
         )
 
         if indexer.entry_point:
-            uow.collections.add_index_metadata(
+            uow.collections.set_index_metadata(
                 collection_id=collection.id,
                 key="entry_point",
                 value=str(indexer.entry_point)

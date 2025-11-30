@@ -47,3 +47,4 @@ class SearchService:
     ) -> None:
         indexer = indexer_manager.get_indexer(collection_name, uow)
         indexer.update(vector)
+        indexer_manager._save_to_db(collection_name, uow)

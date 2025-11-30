@@ -44,7 +44,7 @@ class CollectionRepository:
         return True
 
     
-    def add_index_metadata(self, collection_id: int, key: str, value: str) -> None:
+    def set_index_metadata(self, collection_id: int, key: str, value: str) -> None:
         self.session.merge(models.IndexMetadata(
             collection_id = collection_id,
             key = key,
