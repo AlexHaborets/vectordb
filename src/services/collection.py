@@ -19,7 +19,7 @@ class CollectionService():
         success = uow.collections.delete_collection(collection_name=collection_name)
         if not success:
             raise CollectionNotFoundError(collection_name)
-        indexer_manager.remove_indexer(collection_name, uow)
+        indexer_manager.remove_indexer(collection_name)
     
     def get_all_collections(self, uow: UnitOfWork) -> List[Collection]:
         collections = uow.collections.get_all_collections()

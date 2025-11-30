@@ -1,0 +1,15 @@
+# Files
+Dockerfile
+.dockerignore
+.gitignore
+*.sqlite
+*.sqlite3
+*.ipynb
+*.md
+
+# Directories
+__pycache__
+client
+.venv
+.vscode
+.git

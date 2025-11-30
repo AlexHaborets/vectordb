@@ -19,7 +19,7 @@ class IndexerManager:
         self._indexers[collection_name] = indexer
         return indexer
 
-    def remove_indexer(self, collection_name: str, uow: UnitOfWork):
+    def remove_indexer(self, collection_name: str) -> None:
         if collection_name in self._indexers:
             del self._indexers[collection_name]
         
