@@ -41,10 +41,10 @@ class SearchService:
     def update(
         self, 
         collection_name: str,
-        vector: Vector,
+        vectors: List[Vector],
         indexer_manager: IndexerManager,
         uow: UnitOfWork
     ) -> None:
         indexer = indexer_manager.get_indexer(collection_name, uow)
-        indexer.update(vector)
+        indexer.update(vectors)
         indexer_manager._save_to_db(collection_name, uow)

@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
@@ -11,11 +11,11 @@ class VectorRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_vector_by_id(self, collection_id: int, vector_id: int) -> Optional[models.Vector]:
+    def get_vector_by_id(self, collection_id: int, vector_id: str) -> Optional[models.Vector]:
         return (
             self.session.query(models.Vector)
             .filter(
-                models.Vector.id == vector_id,
+                models.Vector.external_id == vector_id,
                 models.Vector.collection_id == collection_id,
                 models.Vector.deleted == False,  # noqa: E712
             )
@@ -29,7 +29,6 @@ class VectorRepository:
                 models.Vector.collection_id == collection_id,
                 models.Vector.deleted == False  # noqa: E712
             )
-            .order_by(models.Vector.id)
             .all()
         )
     
@@ -56,27 +55,75 @@ class VectorRepository:
             .all()
         )
     
-    def add_vector(self, collection_id: int, vector: schemas.VectorCreate) -> models.Vector:
-        new_vector = models.Vector(
-            vector_metadata=models.VectorMetadata(
-                source_document=vector.vector_metadata.source_document,
-                content=vector.vector_metadata.content,
-            ),
-            collection_id=collection_id,
-            vector=vector.vector,
-        )
-        self.session.add(new_vector)
-        self.session.commit()
-        self.session.refresh(new_vector)
-        return new_vector   
+    def upsert_vectors(self, collection_id: int, vectors: List[schemas.VectorCreate]) -> List[models.Vector]:
+        new_ids = [v.id for v in vectors]
 
-    def mark_vector_deleted(self,  collection_id: int, vector_id: int) -> Optional[models.Vector]:
-        vector = self.get_vector_by_id(collection_id, vector_id)
-        if vector and not vector.deleted:
-            vector.deleted = True
-            self.session.commit()
-            self.session.refresh(vector)
-        return vector
+        existing_vectors = (
+            self.session.query(models.Vector)
+            .filter(
+                models.Vector.collection_id == collection_id,
+                models.Vector.external_id.in_(new_ids)
+            )
+            .all()
+        )
+
+        existing_map = {v.external_id: v for v in existing_vectors}
+
+        results = []
+
+        for v in vectors:
+            existing_vec = existing_map.get(v.id)
+
+            if existing_vec:
+                existing_vec.vector = v.vector
+                
+                if existing_vec.deleted:
+                    existing_vec.deleted = False
+
+                if existing_vec.vector_metadata:
+                    existing_vec.vector_metadata.source_document = v.vector_metadata.source_document
+                    existing_vec.vector_metadata.content = v.vector_metadata.content
+                else:
+                    # If for some obscure and unknown reason vector metadata doesn't exist:
+                    existing_vec.vector_metadata = models.VectorMetadata(
+                        source_document=v.vector_metadata.source_document,
+                        content=v.vector_metadata.content
+                    )
+                
+                results.append(existing_vec)
+
+            else:
+                new_vector = models.Vector(
+                    collection_id=collection_id,
+                    external_id=v.id,
+                    vector=v.vector,
+                    vector_metadata=models.VectorMetadata(
+                        source_document=v.vector_metadata.source_document,
+                        content=v.vector_metadata.content,
+                    )
+                )
+                self.session.add(new_vector)
+                results.append(new_vector)
+
+        self.session.commit()
+        
+        for v in results: 
+            self.session.refresh(v) 
+        
+        return results
+
+    def mark_vector_deleted(self,  collection_id: int, vector_id: str) -> bool:
+        result = self.session.execute(
+            update(models.Vector)
+            .where(
+                models.Vector.collection_id == collection_id,
+                models.Vector.external_id == vector_id,
+                models.Vector.deleted == False  # noqa: E712
+            )
+            .values(deleted=True)
+        )
+        self.session.commit()
+        return result.rowcount > 0
 
     def get_graph(self, collection_id: int) -> Dict[int, List[int]]:
         edges = self.session.execute(

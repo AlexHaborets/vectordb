@@ -5,7 +5,7 @@ from src.engine import VamanaConfig, VamanaIndexer
 import src.common.config as config
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from src.schemas import VectorLite
+from src.schemas.vector import Vector
 
 class IndexerManager:
     def __init__(self) -> None:
@@ -41,7 +41,7 @@ class IndexerManager:
         ) 
         
         vectors_in_db = uow.vectors.get_all_vectors(collection.id)
-        vectors = [VectorLite.model_validate(v) for v in vectors_in_db]
+        vectors = [Vector.model_validate(v) for v in vectors_in_db]
         vector_store = VectorStore.build_from_vectors(vectors=vectors, dims=collection.dimension) 
 
         entry_point_in_db = uow.collections.get_index_metadata(

@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -51,7 +52,12 @@ graph_association_table = Table(
 class Vector(Base):
     __tablename__ = "vectors"
 
+    __table_args__ = (
+        UniqueConstraint('collection_id', 'external_id', name='uq_collection_external_id'),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
 
     collection_id: Mapped[int] = mapped_column(
         ForeignKey("collections.id", ondelete="CASCADE"), index=True
@@ -95,7 +101,7 @@ class Vector(Base):
 class VectorMetadata(Base):
     __tablename__ = "vector_metadata"
 
-    vector_id: Mapped[int] = mapped_column(
+    vector_id: Mapped[str] = mapped_column(
         ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
     )
 

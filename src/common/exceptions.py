@@ -13,8 +13,8 @@ class CollectionNotFoundError(EntityNotFoundError):
 
 
 class VectorNotFoundError(EntityNotFoundError):
-    def __init__(self, vector_id: int) -> None:
-        super().__init__(f"Vector with id {vector_id} not found")
+    def __init__(self, vector_id: str) -> None:
+        super().__init__(f"Vector with id '{vector_id}' not found")
 
 
 class DuplicateEntityError(VectorDBError):

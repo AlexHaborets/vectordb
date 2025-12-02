@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
 import numpy as np
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from src.common import config
+from src.common.config import NUMPY_DTYPE
+
 
 
 class VectorMetadataBase(BaseModel):
@@ -27,44 +28,29 @@ class VectorBase(BaseModel):
 
 
 class VectorCreate(VectorBase):
+    id: str
     vector: List[float]
     vector_metadata: VectorMetadataCreate
 
 
-class Vector(VectorBase):
-    id: int
+class Vector(BaseModel):
+    id: str = Field(validation_alias="external_id")
+    internal_id: int = Field(validation_alias="id", exclude=True)
+
     vector: List[float]
     vector_metadata: VectorMetadata
 
     @field_validator("vector", mode="before")
     @classmethod
-    def vector_to_list(cls, v):
+    def vector_to_list(cls, v: Any) -> List[float]:
         if isinstance(v, np.ndarray):
             return v.tolist()
         return v
+    
+    @property
+    def numpy_vector(self) -> np.ndarray:
+        return np.array(self.vector, dtype=NUMPY_DTYPE)
 
     class Config:
         from_attributes = True
-
-
-class VectorLite(VectorBase):
-    id: int
-    numpy_vector: np.ndarray
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        if not isinstance(other, VectorLite):
-            return NotImplemented
-        return self.id == other.id
-
-    @classmethod
-    def from_vector(cls, vector: Vector) -> "VectorLite":
-        return cls(
-            id=vector.id, numpy_vector=np.array(vector.vector, dtype=config.NUMPY_DTYPE)
-        )
-
-    class Config:
-        from_attributes = True
-        arbitrary_types_allowed = True
+        populate_by_name = True
