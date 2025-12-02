@@ -1,8 +1,8 @@
-"""initial migration
+"""initial
 
-Revision ID: 3f0935190fc4
+Revision ID: fcb7e353a823
 Revises: 
-Create Date: 2025-11-30 16:44:42.641289
+Create Date: 2025-12-01 19:58:12.343824
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3f0935190fc4'
+revision: str = 'fcb7e353a823'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -38,6 +38,7 @@ def upgrade() -> None:
     )
     op.create_table('vectors',
     sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('external_id', sa.String(), nullable=False),
     sa.Column('collection_id', sa.Integer(), nullable=False),
     sa.Column('vector_blob', sa.BLOB(), nullable=False),
     sa.Column('deleted', sa.Boolean(), nullable=False),
@@ -46,6 +47,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_vectors_collection_id'), 'vectors', ['collection_id'], unique=False)
     op.create_index(op.f('ix_vectors_deleted'), 'vectors', ['deleted'], unique=False)
+    op.create_index(op.f('ix_vectors_external_id'), 'vectors', ['external_id'], unique=True)
     op.create_table('graph',
     sa.Column('source_id', sa.Integer(), nullable=False),
     sa.Column('neighbor_id', sa.Integer(), nullable=False),
@@ -72,6 +74,7 @@ def downgrade() -> None:
     op.drop_table('vector_metadata')
     op.drop_index(op.f('ix_graph_collection_id'), table_name='graph')
     op.drop_table('graph')
+    op.drop_index(op.f('ix_vectors_external_id'), table_name='vectors')
     op.drop_index(op.f('ix_vectors_deleted'), table_name='vectors')
     op.drop_index(op.f('ix_vectors_collection_id'), table_name='vectors')
     op.drop_table('vectors')

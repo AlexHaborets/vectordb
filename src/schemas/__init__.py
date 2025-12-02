@@ -1,12 +1,11 @@
 from .collection import Collection, CollectionCreate
 from .query import Query, SearchResult
-from .vector import Vector, VectorCreate, VectorLite
+from .vector import Vector, VectorCreate
 
 __all__ = [
     "Query",
     "SearchResult",
     "VectorCreate",
-    "VectorLite",
     "Vector",
     "CollectionCreate",
     "Collection",

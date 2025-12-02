@@ -13,27 +13,27 @@ vector_router = APIRouter(prefix="/collections/{collection_name}/vectors", tags=
 collection_service = CollectionService()
 search_service = SearchService()
 
-@vector_router.post("/", response_model=Vector, status_code=201)
-def add(
+@vector_router.post("/", response_model=List[Vector], status_code=201)
+def upsert(
     collection_name: str,
-    vector: VectorCreate,
+    vectors: List[VectorCreate],
     uow: Annotated[UnitOfWork, Depends(get_uow)],
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
-) -> Vector:
+) -> List[Vector]:
     with uow:
-        vector_db = collection_service.add_vector(collection_name, vector, uow)
+        vectors_in_db = collection_service.upsert_vectors(collection_name, vectors, uow)
         search_service.update(
             collection_name=collection_name,
-            vector=vector_db,
+            vectors=vectors_in_db,
             indexer_manager=indexer_manager,
             uow=uow
         )
-        return vector_db
+        return vectors_in_db
 
 
-@vector_router.get("/", response_model=Vector)
+@vector_router.get("/{vector_id}", response_model=Vector)
 def get_by_id(
-    collection_name: str, vector_id: int, uow: Annotated[UnitOfWork, Depends(get_uow)]
+    collection_name: str, vector_id: str, uow: Annotated[UnitOfWork, Depends(get_uow)]
 ) -> Vector:
     with uow:
         return collection_service.get_vector(collection_name, vector_id, uow)
@@ -50,8 +50,8 @@ def get_all(
 @vector_router.delete("/", response_model=Vector, status_code=201)
 def delete_by_id(
     collection_name: str,
-    vector_id: int,
+    vector_id: str,
     uow: Annotated[UnitOfWork, Depends(get_uow)],
-) -> Vector:
+) -> None:
     with uow:
-        return collection_service.delete_vector(collection_name, vector_id, uow)
+        collection_service.delete_vector(collection_name, vector_id, uow)

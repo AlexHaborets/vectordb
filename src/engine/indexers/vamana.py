@@ -9,9 +9,9 @@ from src.common import config
 from src.common.metrics import MetricType, get_metric
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from src.schemas import Vector, VectorLite
 from dataclasses import dataclass
 
+from src.schemas import Vector
 
 @dataclass
 class VamanaConfig:
@@ -142,8 +142,8 @@ class VamanaIndexer:
 
         self.entry_point = mediod_id
 
-    def update(self, vector: Vector) -> None:
-        self.vector_store.add(VectorLite.from_vector(vector))
+    def update(self, vectors: List[Vector]) -> None:
+        self.vector_store.add_batch(vectors)
         # TODO: Use incremental updates instead of a full reindexing
         self.index()
 

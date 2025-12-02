@@ -9,17 +9,13 @@ class VectorMetadata(BaseModel):
 
 
 class Vector(BaseModel):
+    id: str
     vector: List[float]
     vector_metadata: VectorMetadata
-
-
-class VectorResponse(Vector):
-    id: int
-
-
+    
 class SearchResult(BaseModel):
     score: float
-    vector: VectorResponse
+    vector: Vector
 
 
 class Query(BaseModel):

@@ -2,8 +2,9 @@ import random
 from typing import Dict, List
 
 from src.common import config
-from src.schemas import VectorLite
 import numpy as np
+
+from src.schemas.vector import Vector
 
 
 class VectorStore:
@@ -34,28 +35,28 @@ class VectorStore:
         indeces = [self.dbid_to_idx[vid] for vid in vector_ids]
         return self.vectors[indeces]
 
-    def add(self, vector: VectorLite) -> None:
+    def add(self, vector: Vector) -> None:
         idx = self.vectors.shape[0]
-        self.vectors = np.vstack([self.vectors, vector.numpy_vector])
+        self.vectors = np.vstack([self.vectors, vector.vector])
 
-        self.dbid_to_idx[vector.id] = idx
-        self.idx_to_dbid[idx] = vector.id
+        self.dbid_to_idx[vector.internal_id] = idx
+        self.idx_to_dbid[idx] = vector.internal_id
 
-    def set(self, vector: VectorLite) -> None:
+    def set(self, vector: Vector) -> None:
         if vector.id in self.dbid_to_idx:
             idx = self.dbid_to_idx[vector.id]
-            self.vectors[idx] = vector.numpy_vector
+            self.vectors[idx] = vector.vector
         else:
             self.add(vector)
 
-    def add_batch(self, vectors: List[VectorLite]) -> None:
-        new_vectors = [v for v in vectors if v.id not in self.dbid_to_idx]
+    def add_batch(self, vectors: List[Vector]) -> None:
+        new_vectors = [v for v in vectors if v.internal_id not in self.dbid_to_idx]
         if not new_vectors:
             return
 
-        new_db_ids = [v.id for v in new_vectors]
+        new_db_ids = [v.internal_id for v in new_vectors]
         new_np_vectors = np.array(
-            [v.numpy_vector for v in new_vectors], dtype=config.NUMPY_DTYPE
+            [v.vector for v in new_vectors], dtype=config.NUMPY_DTYPE
         )
 
         current_size = self.vectors.shape[0]
@@ -74,7 +75,7 @@ class VectorStore:
         return {db_id: self.vectors[self.dbid_to_idx[db_id]] for db_id in db_ids}
 
     @classmethod
-    def build_from_vectors(cls, vectors: List[VectorLite], dims: int) -> "VectorStore":
+    def build_from_vectors(cls, vectors: List[Vector], dims: int) -> "VectorStore":
         store = cls(dims)
 
         if vectors:
