@@ -4,9 +4,9 @@ from src.common import config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
 from src.engine.indexer_manager import IndexerManager
-from src.schemas import Query, SearchResult, Vector
+from src.schemas import Query, SearchResult, Vector, VectorData
 
-class SearchService:
+class IndexService:
     def __init__(self) -> None:
         pass
 
@@ -46,5 +46,5 @@ class SearchService:
         uow: UnitOfWork
     ) -> None:
         indexer = indexer_manager.get_indexer(collection_name, uow)
-        indexer.update(vectors)
-        indexer_manager._save_to_db(collection_name, uow)
+        indexer.update(vectors=[VectorData.from_vector(v) for v in vectors])
+        indexer_manager.save_to_db(collection_name, uow)

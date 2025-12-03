@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: fcb7e353a823
+Revision ID: c899d0e89a68
 Revises: 
-Create Date: 2025-12-01 19:58:12.343824
+Create Date: 2025-12-02 18:01:06.092607
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'fcb7e353a823'
+revision: str = 'c899d0e89a68'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -43,7 +43,8 @@ def upgrade() -> None:
     sa.Column('vector_blob', sa.BLOB(), nullable=False),
     sa.Column('deleted', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['collection_id'], ['collections.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('collection_id', 'external_id', name='uq_collection_external_id')
     )
     op.create_index(op.f('ix_vectors_collection_id'), 'vectors', ['collection_id'], unique=False)
     op.create_index(op.f('ix_vectors_deleted'), 'vectors', ['deleted'], unique=False)
@@ -60,7 +61,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_graph_collection_id'), 'graph', ['collection_id'], unique=False)
     op.create_table('vector_metadata',
     sa.Column('vector_id', sa.Integer(), nullable=False),
-    sa.Column('source_document', sa.String(), nullable=False),
+    sa.Column('source', sa.String(), nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
     sa.ForeignKeyConstraint(['vector_id'], ['vectors.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('vector_id')

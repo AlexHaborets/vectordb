@@ -14,7 +14,7 @@ class CollectionNotFoundError(EntityNotFoundError):
 
 class VectorNotFoundError(EntityNotFoundError):
     def __init__(self, vector_id: str) -> None:
-        super().__init__(f"Vector with id '{vector_id}' not found")
+        super().__init__(f"Vector with id '{vector_id}' not found.")
 
 
 class DuplicateEntityError(VectorDBError):
@@ -33,5 +33,5 @@ class InvalidOperationError(VectorDBError):
 class WrongVectorDimensionsError(InvalidOperationError):
     def __init__(self, actual_dims: int, expected_dims: int) -> None:
         super().__init__(
-            f"Wrong vector dimension ({actual_dims}) for index with dimension {expected_dims}"
+            f"Wrong vector dimension ({actual_dims}) for index with dimension {expected_dims}."
         )

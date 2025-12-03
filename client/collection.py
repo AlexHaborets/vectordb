@@ -1,6 +1,6 @@
 from typing import List
 
-from client.models import Query, SearchResult, Vector, VectorMetadata
+from client.models import Query, SearchResult, Vector, UpsertBatch
 from client.transport import Transport
 
 
@@ -9,27 +9,22 @@ class Collection:
         self.name = name
         self._transport = transport
 
-    def add(self, vector: List[float], id: str, source: str, content: str) -> Vector:
-        payload = Vector(
-            id=id,
-            vector=vector, 
-            vector_metadata=VectorMetadata(source_document=source, content=content)
-        )
-                
-        path = f"/collections/{self.name}/vectors/"
+    def upsert(self, vectors: List[Vector]) -> List[Vector]:
+        payload = UpsertBatch(vectors=vectors)
+        path = f"/collections/{self.name}/vectors"
         response = self._transport.post(path=path, json=payload.model_dump())
-        return Vector.model_validate(response)
+        return [Vector.model_validate(v) for v in response]
     
     def search(self, query: List[float], k: int = 5) -> List[SearchResult]:
         payload = Query(
             vector=query,
             k=k
         )
-        path = f"/collections/{self.name}/search/"
+        path = f"/collections/{self.name}/search"
         response = self._transport.post(path=path, json=payload.model_dump())
         return [SearchResult.model_validate(item) for item in response]
     
-    def get(self, vector_id: int) -> Vector:
-        path = f"/collections/{self.name}/vectors/?vector_id={vector_id}"
-        response = self._transport.post(path=path)
+    def get(self, vector_id: str) -> Vector:
+        path = f"/collections/{self.name}/vectors/{vector_id}"
+        response = self._transport.get(path=path)
         return Vector.model_validate(response)    

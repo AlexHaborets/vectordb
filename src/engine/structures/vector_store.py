@@ -4,7 +4,7 @@ from typing import Dict, List
 from src.common import config
 import numpy as np
 
-from src.schemas.vector import Vector
+from src.schemas.vector import VectorData
 
 
 class VectorStore:
@@ -20,7 +20,7 @@ class VectorStore:
         # Maps matrix to ids db ids
         self.idx_to_dbid: Dict[int, int] = {}
 
-        # Indeces in the vectors field of deleted vectors 
+        # Indeces in the vectors field of deleted vectors
         # TODO: update methods to use this field
         self.idxs: set[int]
 
@@ -35,26 +35,26 @@ class VectorStore:
         indeces = [self.dbid_to_idx[vid] for vid in vector_ids]
         return self.vectors[indeces]
 
-    def add(self, vector: Vector) -> None:
+    def add(self, vector: VectorData) -> None:
         idx = self.vectors.shape[0]
         self.vectors = np.vstack([self.vectors, vector.vector])
 
-        self.dbid_to_idx[vector.internal_id] = idx
-        self.idx_to_dbid[idx] = vector.internal_id
+        self.dbid_to_idx[vector.id] = idx
+        self.idx_to_dbid[idx] = vector.id
 
-    def set(self, vector: Vector) -> None:
+    def set(self, vector: VectorData) -> None:
         if vector.id in self.dbid_to_idx:
             idx = self.dbid_to_idx[vector.id]
             self.vectors[idx] = vector.vector
         else:
             self.add(vector)
 
-    def add_batch(self, vectors: List[Vector]) -> None:
-        new_vectors = [v for v in vectors if v.internal_id not in self.dbid_to_idx]
+    def add_batch(self, vectors: List[VectorData]) -> None:
+        new_vectors = [v for v in vectors if v.id not in self.dbid_to_idx]
         if not new_vectors:
             return
 
-        new_db_ids = [v.internal_id for v in new_vectors]
+        new_db_ids = [v.id for v in new_vectors]
         new_np_vectors = np.array(
             [v.vector for v in new_vectors], dtype=config.NUMPY_DTYPE
         )
@@ -75,7 +75,7 @@ class VectorStore:
         return {db_id: self.vectors[self.dbid_to_idx[db_id]] for db_id in db_ids}
 
     @classmethod
-    def build_from_vectors(cls, vectors: List[Vector], dims: int) -> "VectorStore":
+    def build_from_vectors(cls, vectors: List[VectorData], dims: int) -> "VectorStore":
         store = cls(dims)
 
         if vectors:

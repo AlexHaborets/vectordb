@@ -17,7 +17,7 @@ class Client:
             dimension=dimension, 
             metric=metric
         )
-        self._transport.post("/collections/", json=payload.model_dump())
+        self._transport.post("/collections", json=payload.model_dump())
         return Collection(name, self._transport)
 
     def get_collection(self, name: str) -> Collection:
@@ -33,7 +33,7 @@ class Client:
         return collection
 
     def list_collections(self) -> List[str]:
-        data = self._transport.get("/collections/")
+        data = self._transport.get("/collections")
         return [item["name"] for item in data]
 
     def delete_collection(self, name: str) -> None:

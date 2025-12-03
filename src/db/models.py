@@ -74,7 +74,7 @@ class Vector(Base):
         "Vector",
         secondary=graph_association_table,
         primaryjoin=(id == graph_association_table.c.source_id),
-        secondaryjoin=(id == graph_association_table.c.neighbor_id),
+        secondaryjoin=(id == graph_association_table.c.neighbor_id)
     )
 
     vector_metadata: Mapped["VectorMetadata"] = relationship(
@@ -105,7 +105,7 @@ class VectorMetadata(Base):
         ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
     )
 
-    source_document: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")

@@ -1,6 +1,6 @@
 from .collection import CollectionService
-from .search import SearchService
+from .index import IndexService
 
 
 
-__all__ = ["CollectionService", "SearchService"]
+__all__ = ["CollectionService", "IndexService"]
