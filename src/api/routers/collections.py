@@ -12,7 +12,7 @@ collection_router = APIRouter(prefix="/collections", tags=["collections"])
 
 collection_service = CollectionService()
 
-@collection_router.post("/", response_model=Collection, status_code=201)
+@collection_router.post("", response_model=Collection, status_code=201)
 def add(
     collection: CollectionCreate,
     uow: Annotated[UnitOfWork, Depends(get_uow)],
@@ -21,7 +21,7 @@ def add(
         return collection_service.create_collection(collection, uow)
 
 
-@collection_router.get("/", response_model=List[Collection])
+@collection_router.get("", response_model=List[Collection])
 def get_all(uow: Annotated[UnitOfWork, Depends(get_uow)]) -> List[Collection]:
     # TODO: Add pagination
     with uow:

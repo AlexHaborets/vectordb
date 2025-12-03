@@ -4,14 +4,17 @@ from client.types import Metric
 
 
 class VectorMetadata(BaseModel):
-    source_document: str
+    source: str
     content: str
 
 
 class Vector(BaseModel):
     id: str
     vector: List[float]
-    vector_metadata: VectorMetadata
+    metadata: VectorMetadata
+
+class UpsertBatch(BaseModel):
+    vectors: List[Vector]
     
 class SearchResult(BaseModel):
     score: float

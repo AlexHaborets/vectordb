@@ -5,28 +5,33 @@ from fastapi import APIRouter, Depends
 from src.api.dependencies import get_indexer_manager, get_uow
 from src.db import UnitOfWork
 from src.engine import IndexerManager
-from src.schemas import Vector, VectorCreate
-from src.services import CollectionService, SearchService
+from src.schemas import UpsertBatch, Vector
+from src.services import CollectionService, IndexService
 
-vector_router = APIRouter(prefix="/collections/{collection_name}/vectors", tags=["vectors"])
+vector_router = APIRouter(
+    prefix="/collections/{collection_name}/vectors", tags=["vectors"]
+)
 
 collection_service = CollectionService()
-search_service = SearchService()
+index_service = IndexService()
 
-@vector_router.post("/", response_model=List[Vector], status_code=201)
+
+@vector_router.post("", response_model=List[Vector], status_code=201)
 def upsert(
     collection_name: str,
-    vectors: List[VectorCreate],
+    batch: UpsertBatch,
     uow: Annotated[UnitOfWork, Depends(get_uow)],
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[Vector]:
     with uow:
-        vectors_in_db = collection_service.upsert_vectors(collection_name, vectors, uow)
-        search_service.update(
+        vectors_in_db = collection_service.upsert_vectors(
+            collection_name, batch.vectors, uow
+        )
+        index_service.update(
             collection_name=collection_name,
             vectors=vectors_in_db,
             indexer_manager=indexer_manager,
-            uow=uow
+            uow=uow,
         )
         return vectors_in_db
 
@@ -39,7 +44,7 @@ def get_by_id(
         return collection_service.get_vector(collection_name, vector_id, uow)
 
 
-@vector_router.get("/", response_model=List[Vector])
+@vector_router.get("", response_model=List[Vector])
 def get_all(
     collection_name: str, uow: Annotated[UnitOfWork, Depends(get_uow)]
 ) -> List[Vector]:
@@ -47,7 +52,7 @@ def get_all(
         return collection_service.get_all_vectors(collection_name, uow)
 
 
-@vector_router.delete("/", response_model=Vector, status_code=201)
+@vector_router.delete("", response_model=Vector, status_code=201)
 def delete_by_id(
     collection_name: str,
     vector_id: str,
