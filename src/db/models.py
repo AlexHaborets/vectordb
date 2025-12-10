@@ -57,7 +57,7 @@ class Vector(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
     collection_id: Mapped[int] = mapped_column(
         ForeignKey("collections.id", ondelete="CASCADE"), index=True

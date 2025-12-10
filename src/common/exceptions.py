@@ -35,3 +35,4 @@ class WrongVectorDimensionsError(InvalidOperationError):
         super().__init__(
             f"Wrong vector dimension ({actual_dims}) for index with dimension {expected_dims}."
         )
+

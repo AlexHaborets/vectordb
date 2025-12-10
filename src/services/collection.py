@@ -1,4 +1,5 @@
 from typing import List
+
 from src.common.exceptions import CollectionAlreadyExistsError, CollectionNotFoundError, VectorNotFoundError, WrongVectorDimensionsError
 from src.db import UnitOfWork
 from src.engine import IndexerManager
@@ -43,9 +44,8 @@ class CollectionService():
             dim = len(vec.vector)
             if dim != collection.dimension:
                 raise WrongVectorDimensionsError(dim, collection.dimension)
-        
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
-        
+
         return [Vector.model_validate(v) for v in new_vectors]
     
     def get_vector(self, collection_name: str, vector_id: str, uow: UnitOfWork) -> Vector:

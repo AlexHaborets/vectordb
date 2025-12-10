@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from src.schemas.vector import VectorData
 
-@dataclass
+@dataclass(frozen=True, order=True)
 class VamanaConfig:
     dims: int
     metric: MetricType
