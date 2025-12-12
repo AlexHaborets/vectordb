@@ -36,7 +36,6 @@ class IndexerManager:
         vamana_config = VamanaConfig(
             metric=collection.metric,
             dims=collection.dimension,
-            alpha=config.VAMANA_ALPHA,
             L_build=config.VAMANA_L_BUILD,
             L_search=config.VAMANA_L_SEARCH,
             R=config.VAMANA_R,

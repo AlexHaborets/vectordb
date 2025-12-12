@@ -1,4 +1,4 @@
-from exceptions import (
+from .exceptions import (
     CollectionAlreadyExistsError,
     CollectionNotFoundError,
     DuplicateEntityError,
@@ -7,9 +7,8 @@ from exceptions import (
     VectorNotFoundError,
     WrongVectorDimensionsError,
 )
-from logger import setup_logger
-import config
-from metrics import CosineDistance, DistanceMetric, L2Distance, MetricType, get_metric
+from .logger import setup_logger
+from .metrics import CosineDistance, DistanceMetric, L2Distance, MetricType, get_metric
 
 __all__ = [
     "DuplicateEntityError",
@@ -25,5 +24,4 @@ __all__ = [
     "MetricType",
     "setup_logger",
     "get_metric",
-    "config"
 ]

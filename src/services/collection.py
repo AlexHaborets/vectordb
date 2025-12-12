@@ -50,10 +50,10 @@ class CollectionService():
         
         # Normalize vectors is the collection metric is cosine
         if collection.metric == MetricType.COSINE:
-            matrix = np.array([np.array(v.vector) for v in vectors])
+            matrix = np.array([v.vector for v in vectors])
             normalized_vectors = normalize(matrix, norm='l2')
-            for i, vec in enumerate(vectors):
-                vec.vector = normalized_vectors[i].tolist()
+            for i in range(len(vectors)):
+                vectors[i].vector = normalized_vectors[i].tolist()
 
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
 

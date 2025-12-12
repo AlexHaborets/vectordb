@@ -12,7 +12,6 @@ VAMANA_L_SEARCH = 100
 # Search list size during building the index
 VAMANA_L_BUILD = 64
 VAMANA_R = 32
-VAMANA_ALPHA = 1.2 
 
 # Decimal places to round the similarity score 
 # between the query and vectors-results from search 

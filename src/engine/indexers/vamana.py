@@ -1,22 +1,21 @@
+import bisect
 import heapq
 import random
+from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
-from scipy.spatial.distance import pdist, squareform
 
-from src.common import config, MetricType, get_metric
+from src.common import MetricType, config
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from dataclasses import dataclass
-
 from src.schemas.vector import VectorData
+
 
 @dataclass(frozen=True, order=True)
 class VamanaConfig:
     dims: int
     metric: MetricType
-    alpha: float = 1.2
     L_build: int = 64
     L_search: int = 100
     R: int = 32
@@ -24,11 +23,11 @@ class VamanaConfig:
 
 class VamanaIndexer:
     def __init__(
-            self, 
-            config: VamanaConfig, 
-            vector_store: VectorStore, 
-            graph: Optional[Graph] = None,
-            entry_point: Optional[int] = None
+        self,
+        config: VamanaConfig,
+        vector_store: VectorStore,
+        graph: Optional[Graph] = None,
+        entry_point: Optional[int] = None,
     ) -> None:
         self.graph = graph if graph else Graph()
         self.entry_point = entry_point
@@ -36,13 +35,21 @@ class VamanaIndexer:
 
         # Indexing/search parameters
         self._dims = config.dims
-        self._alpha = config.alpha
         self._L_build = config.L_build
         self._L_search = config.L_search
         self._R = config.R
-        self._metric = MetricType(config.metric) 
-        self._distance = get_metric(config.metric)
+        self._metric = MetricType(config.metric)
 
+    def _compute_dists_batch(self, query: np.ndarray, targets: List[int] | np.ndarray) -> np.ndarray:
+        if isinstance(targets, list):
+            vectors = self.vector_store.get_batch(targets)
+        else:
+            vectors = targets
+        
+        if self._metric == MetricType.L2:
+            return np.linalg.norm(vectors - query, axis=1)
+        else:
+            return 1 - np.dot(vectors, query)
 
     def greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
@@ -53,60 +60,131 @@ class VamanaIndexer:
         Result: Result set L containing k-approx NNs, and
             a set V containing all the visited nodes
         """
-        candidates = set([entry_id])
+        query_entry_dist = self._compute_dists_batch(
+            query=query_vector, targets=[entry_id]
+        )[0]
+
+        candidates = [(query_entry_dist, entry_id)]
+
         visited = set()
 
-        def distance_fn(id: int) -> float:
-            p = self.vector_store.get(id)
-            return self._distance(p, query_vector)
+        seen = {entry_id}
 
-        while candidates - visited:
-            p_star = min(candidates - visited, key=distance_fn)
-            candidates = candidates.union(self.graph.get_neighbors(p_star))
+        best = [(query_entry_dist, entry_id)]
+
+        while candidates:
+            p_star_dist, p_star = heapq.heappop(candidates)  # type: ignore
+
+            if len(best) >= L and p_star_dist > best[-1][0]:
+                break
+
+            if p_star in visited:
+                continue
+
             visited.add(p_star)
 
-            if len(candidates) > L:
-                candidates = set(heapq.nsmallest(L, candidates, key=distance_fn))
+            neighbors = self.graph.get_neighbors(p_star)
 
-        closest_k = heapq.nsmallest(k, candidates, key=distance_fn)
-        return (closest_k, visited)
+            unseen_neighbors = [n for n in neighbors if n not in seen]
 
-    def robust_prune(self, source: int, candidates: set[int]) -> None:
+            if not unseen_neighbors:
+                continue
+
+            dists = self._compute_dists_batch(query_vector, unseen_neighbors)
+
+            for id, dist in zip(unseen_neighbors, dists):
+                seen.add(id)
+                if len(best) >= L:
+                    if dist >= best[-1][0]:
+                        continue
+                    bisect.insort(best, (dist, id))
+                    best.pop()
+                else:
+                    bisect.insort(best, (dist, id))
+
+                heapq.heappush(candidates, (dist, id))  # type: ignore
+
+        return ([x[1] for x in best[:k]], visited)
+
+    def robust_prune(self, source: int, candidates: set[int], alpha: float) -> None:
         """
         Data: Graph G, point p ∈ P , candidate set V,
             distance threshold α ≥ 1, degree bound R
         Result: G is modified by setting at most R new
             out-neighbors for p
         """
-        candidates = candidates.union(self.graph.get_neighbors(source))
-        if source in candidates:
-            candidates.remove(source)
-        self.graph.set_neighbors(source, set())
+        candidates.update(self.graph.get_neighbors(source))
+        candidates.discard(source)
 
+        if not candidates:
+            self.graph.set_neighbors(source, set()) 
+            return
+
+        candidate_list = list(candidates)
         source_vector = self.vector_store.get(source)
+        candidate_source_dists = self._compute_dists_batch(source_vector, candidate_list)
 
-        def distance_fn(id: int) -> float:
-            p = self.vector_store.get(id)
-            return self._distance(p, source_vector)
+        candidates_sorted =  sorted(
+            zip(candidate_source_dists, candidate_list), 
+            key=lambda x: x[0]
+        )
 
-        while candidates:
-            p_star = min(candidates, key=distance_fn)
-            self.graph.add_neighbors(source, set([p_star]))
+        neighbors: List[int] = []
+        neighbors_vectors: List[np.ndarray] = []
 
-            if len(self.graph.get_neighbors(source)) == self._R:
+        for p_star_dist, p_star in candidates_sorted:
+            if len(neighbors) >= self._R:
                 break
+            
+            keep = True
 
-            to_prune = []
-            p_star_vector = self.vector_store.get(p_star)
-            for other in candidates:
-                other_vector = self.vector_store.get(other)
-                if self._alpha * self._distance(
-                    p_star_vector, other_vector
-                ) <= self._distance(source_vector, other_vector):
-                    to_prune.append(other)
+            if neighbors:
+                p_star_vec = self.vector_store.get(p_star)
+                p_star_neighbors = np.array(neighbors_vectors)
 
-            for vector in to_prune:
-                candidates.remove(vector)
+                neighbors_dists = self._compute_dists_batch(p_star_vec, p_star_neighbors)
+
+                values = alpha * neighbors_dists
+
+                if np.any(values <= p_star_dist):
+                    keep = False
+
+            if keep:
+                neighbors.append(p_star)
+                neighbors_vectors.append(self.vector_store.get(p_star))
+        
+        self.graph.set_neighbors(source, set(neighbors))
+
+    def _indexing_pass(self, alpha: float, vector_ids: List[int]) -> None: 
+        sigma = vector_ids
+        random.shuffle(sigma) 
+
+        for i in sigma:
+            query_vector = self.vector_store.get(i)
+            (_, V) = self.greedy_search(
+                entry_id=self.entry_point,  # type: ignore
+                query_vector=query_vector, 
+                k=1, 
+                L=self._L_build
+            )
+
+            self.robust_prune(source=i, candidates=V, alpha = 1.2)
+
+            query_neighbors = self.graph.get_neighbors(i)
+
+            for other in query_neighbors:
+                other_neighbors = set(self.graph.get_neighbors(other))
+                other_neighbors.add(i)
+
+                if len(other_neighbors) > self._R:
+                    self.robust_prune(
+                        source=other, 
+                        candidates=other_neighbors,
+                        alpha=1.2
+                    )
+                else:
+                    self.graph.set_neighbors(other, other_neighbors)
+
 
     def index(self) -> None:
         """
@@ -115,33 +193,12 @@ class VamanaIndexer:
         """
         vector_ids = self.vector_store.get_dbids()
         self.graph = Graph.random_regular(verteces=vector_ids, r=self._R)
+        self.entry_point = self.get_mediod()
+        
+        self._indexing_pass(alpha=1.0, vector_ids=vector_ids)
 
-        sigma = vector_ids
-        random.shuffle(sigma)
-        mediod_id = self.get_mediod()
-        if not mediod_id:
-            raise ValueError("what")
-
-        for i in sigma:
-            query_vector = self.vector_store.get(i)
-            (_, V) = self.greedy_search(
-                entry_id=mediod_id, query_vector=query_vector, k=1, L=self._L_build
-            )
-
-            self.robust_prune(source=i, candidates=V)
-
-            query_neighbors = self.graph.get_neighbors(i)
-            for other in query_neighbors:
-                other_neighbors = self.graph.get_neighbors(other)
-                other_neighbors = set(other_neighbors + [i])
-
-                if len(other_neighbors) > self._R:
-                    self.robust_prune(source=other, candidates=other_neighbors)
-                else:
-                    self.graph.set_neighbors(other, other_neighbors)
-
-        self.entry_point = mediod_id
-
+        self._indexing_pass(alpha=1.2, vector_ids=vector_ids)
+                    
     def update(self, vectors: List[VectorData]) -> None:
         self.vector_store.add_batch(vectors)
         # TODO: Use incremental updates instead of a full reindexing
@@ -153,28 +210,32 @@ class VamanaIndexer:
 
         # TODO: In the future use Beam search instead
         results, _ = self.greedy_search(
-            entry_id=self.entry_point, query_vector=query_vector, k=k, L=self._L_search
+            entry_id=self.entry_point, 
+            query_vector=query_vector, 
+            k=k, 
+            L=self._L_search
         )
 
         if not results:
             return []
+        
+        dists = self._compute_dists_batch(query_vector, results)
 
-        def get_score(vec: np.ndarray) -> float:
-            distance = self._distance(vec, query_vector)
-            return 1 / (1 + distance)
+        if self._metric != MetricType.L2:
+            scores = 1.0 - dists
+        else:
+            scores = 1 / (1 + dists)
 
-        result_vectors = self.vector_store.get_batch(results)
         query_results = [
-            (get_score(vector), index) for vector, index in zip(result_vectors, results)
+            (score, index) for score, index in zip(scores, results)
         ]
+
         query_results.sort(key=lambda x: x[0], reverse=True)
 
         return query_results
 
-    def get_mediod(self) -> Optional[int]:
+    def get_mediod(self) -> int:
         sample = self.vector_store.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
-        if not sample:
-            return None
 
         if len(sample) == 1:
             return list(sample.keys())[0]
@@ -182,14 +243,11 @@ class VamanaIndexer:
         ids = list(sample.keys())
         vectors = np.array(list(sample.values()))
 
-        # calculcate pair-wise distances for each vector
-        distances = pdist(vectors, metric=self._metric.value) # type: ignore
+        centroid = np.mean(vectors, axis=0)
 
-        distance_matrix = squareform(distances)
+        dists = np.linalg.norm(vectors - centroid, axis=1)
 
-        distance_sum = distance_matrix.sum(axis=1)
-
-        mediod = np.argmin(distance_sum)
+        mediod = np.argmin(dists)
 
         medoid_id = ids[mediod]
 
