@@ -1,10 +1,13 @@
 from typing import List
 
+import numpy as np
+
+from src.common import MetricType
 from src.common.exceptions import CollectionAlreadyExistsError, CollectionNotFoundError, VectorNotFoundError, WrongVectorDimensionsError
 from src.db import UnitOfWork
 from src.engine import IndexerManager
 from src.schemas import Collection, CollectionCreate, Vector, VectorCreate
-
+from sklearn.preprocessing import normalize
 
 class CollectionService():
     def __init__(self) -> None:
@@ -44,6 +47,14 @@ class CollectionService():
             dim = len(vec.vector)
             if dim != collection.dimension:
                 raise WrongVectorDimensionsError(dim, collection.dimension)
+        
+        # Normalize vectors is the collection metric is cosine
+        if collection.metric == MetricType.COSINE:
+            matrix = np.array([np.array(v.vector) for v in vectors])
+            normalized_vectors = normalize(matrix, norm='l2')
+            for i, vec in enumerate(vectors):
+                vec.vector = normalized_vectors[i].tolist()
+
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
 
         return [Vector.model_validate(v) for v in new_vectors]

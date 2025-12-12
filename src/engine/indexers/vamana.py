@@ -5,8 +5,7 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
-from src.common import config
-from src.common.metrics import MetricType, get_metric
+from src.common import config, MetricType, get_metric
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
 from dataclasses import dataclass
@@ -43,6 +42,7 @@ class VamanaIndexer:
         self._R = config.R
         self._metric = MetricType(config.metric) 
         self._distance = get_metric(config.metric)
+
 
     def greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
