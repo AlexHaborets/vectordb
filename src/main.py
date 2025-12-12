@@ -6,12 +6,12 @@ from loguru import logger
 from src.api import collection_router, search_router, vector_router
 from src.api.dependencies import get_indexer_manager
 from src.api.exception_handlers import create_exception_handler
-from src.common.exceptions import (
+from src.common import (
     DuplicateEntityError,
     EntityNotFoundError,
     InvalidOperationError,
+    setup_logger,
 )
-from src.common.logger import setup_logger
 from src.db import session_manager
 from src.db.uow import DBUnitOfWork
 
