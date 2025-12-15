@@ -30,9 +30,6 @@ class IndexerManager:
         if not collection:
             raise CollectionNotFoundError(collection_name)
 
-        graph_in_db = uow.vectors.get_graph(collection_id=collection.id)
-        graph = Graph(graph=graph_in_db) if graph_in_db else None
-
         vamana_config = VamanaConfig(
             metric=collection.metric,
             dims=collection.dimension,
@@ -45,14 +42,23 @@ class IndexerManager:
             collection.id, include_metadata=False
         )
         vectors = [VectorData.model_validate(v) for v in vectors_in_db]
-        vector_store = VectorStore.build_from_vectors(
-            vectors=vectors, dims=collection.dimension
-        )
+        vector_store = VectorStore(dims=collection.dimension, vectors=vectors)
 
         entry_point_in_db = uow.collections.get_index_metadata(
             collection_id=collection.id, key="entry_point"
         )
-        entry_point = int(entry_point_in_db) if entry_point_in_db else None
+        entry_point = (
+            vector_store.get_idx(int(entry_point_in_db)) 
+            if entry_point_in_db 
+            else None
+        )
+
+        graph_in_db = uow.vectors.get_graph(collection_id=collection.id)
+        graph = Graph.from_db(
+            db_graph=graph_in_db, 
+            degree=vamana_config.R, 
+            dbid_to_idx=vector_store.dbid_to_idx
+        )
 
         indexer = VamanaIndexer(
             config=vamana_config,
@@ -71,13 +77,20 @@ class IndexerManager:
         if not collection:
             raise CollectionNotFoundError(collection_name)
 
-        uow.vectors.save_graph(collection_id=collection.id, graph=indexer.graph.graph)
+        uow.vectors.save_graph(
+            collection_id=collection.id, 
+            graph=indexer.graph.to_db_graph(
+                idx_to_dbid=indexer.vector_store.idx_to_dbid
+            )
+        )
 
-        if indexer.entry_point:
+        if entry_point := indexer.entry_point:
+            db_entry_point = indexer.vector_store.get_dbid(entry_point)
+
             uow.collections.set_index_metadata(
                 collection_id=collection.id,
                 key="entry_point",
-                value=str(indexer.entry_point),
+                value=str(db_entry_point),
             )
 
     def save_all(self, uow: UnitOfWork):

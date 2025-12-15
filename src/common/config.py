@@ -8,7 +8,7 @@ DATABASE_URL = f"sqlite:///{DB_FILE}"
 INDEX_RND_SAMPLE_SIZE = 1000
 
 # Search list size during quering
-VAMANA_L_SEARCH = 100
+VAMANA_L_SEARCH = 64
 # Search list size during building the index
 VAMANA_L_BUILD = 64
 VAMANA_R = 32

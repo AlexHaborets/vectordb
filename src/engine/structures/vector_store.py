@@ -1,5 +1,5 @@
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from src.common import config
 import numpy as np
@@ -12,42 +12,33 @@ class VectorStore:
     An in-memory vector cache/store
     """
 
-    def __init__(self, dims: int) -> None:
+    def __init__(self, dims: int, vectors: Optional[List[VectorData]] = None) -> None:
         self.dims = dims
-        self.vectors: np.ndarray = np.empty((0, dims), dtype=config.NUMPY_DTYPE)
+
         # Maps db ids to matrix ids
         self.dbid_to_idx: Dict[int, int] = {}
-        # Maps matrix to ids db ids
-        self.idx_to_dbid: Dict[int, int] = {}
+        self.idx_to_dbid: List[int] = []
 
-        # Indeces in the vectors field of deleted vectors
-        # TODO: update methods to use this field
-        self.idxs: set[int]
+        if vectors and len(vectors) > 0:
+            self.vectors = np.array(
+                [v.vector for v in vectors], dtype=config.NUMPY_DTYPE
+            )
 
-    def get(self, vector_id: int) -> np.ndarray:
-        idx = self.dbid_to_idx[vector_id]
+            self.idx_to_dbid = [v.id for v in vectors]
+
+            for i, v in enumerate(vectors):
+                self.dbid_to_idx[v.id] = i
+        else:
+            self.vectors = np.empty((0, dims), dtype=config.NUMPY_DTYPE)
+
+    def get(self, idx: int) -> np.ndarray:
         return self.vectors[idx]
 
-    def get_batch(self, vector_ids: List[int]) -> np.ndarray:
-        if not vector_ids:
+    def get_batch(self, idxs: List[int]) -> np.ndarray:
+        if not idxs:
             return np.empty((0, self.dims), dtype=config.NUMPY_DTYPE)
 
-        indeces = [self.dbid_to_idx[vid] for vid in vector_ids]
-        return self.vectors[indeces]
-
-    def add(self, vector: VectorData) -> None:
-        idx = self.vectors.shape[0]
-        self.vectors = np.vstack([self.vectors, vector.vector])
-
-        self.dbid_to_idx[vector.id] = idx
-        self.idx_to_dbid[idx] = vector.id
-
-    def set(self, vector: VectorData) -> None:
-        if vector.id in self.dbid_to_idx:
-            idx = self.dbid_to_idx[vector.id]
-            self.vectors[idx] = vector.vector
-        else:
-            self.add(vector)
+        return self.vectors[idxs]
 
     def add_batch(self, vectors: List[VectorData]) -> None:
         new_vectors = [v for v in vectors if v.id not in self.dbid_to_idx]
@@ -63,25 +54,34 @@ class VectorStore:
 
         self.vectors = np.vstack([self.vectors, new_np_vectors])
 
+        self.idx_to_dbid.extend(new_db_ids)
+
         for i, db_id in enumerate(new_db_ids):
             new_idx = current_size + i
             self.dbid_to_idx[db_id] = new_idx
-            self.idx_to_dbid[new_idx] = db_id
 
-    def get_random_sample(self, k: int) -> Dict[int, np.ndarray]:
-        db_ids = list(self.dbid_to_idx.keys())
-        if len(db_ids) > k:
-            db_ids = random.sample(db_ids, k)
-        return {db_id: self.vectors[self.dbid_to_idx[db_id]] for db_id in db_ids}
-
-    @classmethod
-    def build_from_vectors(cls, vectors: List[VectorData], dims: int) -> "VectorStore":
-        store = cls(dims)
-
-        if vectors:
-            store.add_batch(vectors)
-
-        return store
+    def get_random_sample(self, k: int) -> np.ndarray:
+        current_size = self.vectors.shape[0]
+        if current_size > k:
+            ids = random.sample(range(current_size), k)
+            return self.vectors[ids]
+        else:
+            return self.vectors
+        
+    def size(self) -> int:
+        return self.vectors.shape[0]
 
     def get_dbids(self) -> List[int]:
         return [i for i in self.dbid_to_idx.keys()]
+
+    def get_idxs(self) -> List[int]:
+        return list(range(self.size()))
+    
+    def get_dbid(self, idx: int) -> int:
+        return self.idx_to_dbid[idx]
+
+    def get_idx(self, dbid: int) -> int:
+        return self.dbid_to_idx[dbid]
+
+
+    
