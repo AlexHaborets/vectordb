@@ -29,7 +29,7 @@ class VamanaIndexer:
         graph: Optional[Graph] = None,
         entry_point: Optional[int] = None,
     ) -> None:
-        self.graph = graph if graph else Graph()
+        self.graph = graph if graph else Graph(size=config.dims, degree=config.R)
         self.entry_point = entry_point
         self.vector_store = vector_store
 
@@ -40,12 +40,14 @@ class VamanaIndexer:
         self._R = config.R
         self._metric = MetricType(config.metric)
 
-    def _compute_dists_batch(self, query: np.ndarray, targets: List[int] | np.ndarray) -> np.ndarray:
+    def _compute_dists_batch(
+        self, query: np.ndarray, targets: List[int] | np.ndarray
+    ) -> np.ndarray:
         if isinstance(targets, list):
             vectors = self.vector_store.get_batch(targets)
         else:
             vectors = targets
-        
+
         if self._metric == MetricType.L2:
             return np.linalg.norm(vectors - query, axis=1)
         else:
@@ -117,16 +119,17 @@ class VamanaIndexer:
         candidates.discard(source)
 
         if not candidates:
-            self.graph.set_neighbors(source, set()) 
+            self.graph.set_neighbors(source, set())
             return
 
         candidate_list = list(candidates)
         source_vector = self.vector_store.get(source)
-        candidate_source_dists = self._compute_dists_batch(source_vector, candidate_list)
+        candidate_source_dists = self._compute_dists_batch(
+            source_vector, candidate_list
+        )
 
-        candidates_sorted =  sorted(
-            zip(candidate_source_dists, candidate_list), 
-            key=lambda x: x[0]
+        candidates_sorted = sorted(
+            zip(candidate_source_dists, candidate_list), key=lambda x: x[0]
         )
 
         neighbors: List[int] = []
@@ -135,14 +138,16 @@ class VamanaIndexer:
         for p_star_dist, p_star in candidates_sorted:
             if len(neighbors) >= self._R:
                 break
-            
+
             keep = True
 
             if neighbors:
                 p_star_vec = self.vector_store.get(p_star)
                 p_star_neighbors = np.array(neighbors_vectors)
 
-                neighbors_dists = self._compute_dists_batch(p_star_vec, p_star_neighbors)
+                neighbors_dists = self._compute_dists_batch(
+                    p_star_vec, p_star_neighbors
+                )
 
                 values = alpha * neighbors_dists
 
@@ -152,23 +157,23 @@ class VamanaIndexer:
             if keep:
                 neighbors.append(p_star)
                 neighbors_vectors.append(self.vector_store.get(p_star))
-        
+
         self.graph.set_neighbors(source, set(neighbors))
 
-    def _indexing_pass(self, alpha: float, vector_ids: List[int]) -> None: 
-        sigma = vector_ids
-        random.shuffle(sigma) 
+    def _indexing_pass(self, alpha: float) -> None:
+        sigma = self.vector_store.get_idxs()
+        random.shuffle(sigma)
 
         for i in sigma:
             query_vector = self.vector_store.get(i)
             (_, V) = self.greedy_search(
                 entry_id=self.entry_point,  # type: ignore
-                query_vector=query_vector, 
-                k=1, 
-                L=self._L_build
+                query_vector=query_vector,
+                k=1,
+                L=self._L_build,
             )
 
-            self.robust_prune(source=i, candidates=V, alpha = 1.2)
+            self.robust_prune(source=i, candidates=V, alpha=alpha)
 
             query_neighbors = self.graph.get_neighbors(i)
 
@@ -178,27 +183,23 @@ class VamanaIndexer:
 
                 if len(other_neighbors) > self._R:
                     self.robust_prune(
-                        source=other, 
-                        candidates=other_neighbors,
-                        alpha=1.2
+                        source=other, candidates=other_neighbors, alpha=alpha
                     )
                 else:
                     self.graph.set_neighbors(other, other_neighbors)
-
 
     def index(self) -> None:
         """
         Data: Database P with n points where i-th point has coords xi, parameters α, L, R
         Result: Directed graph G over P with out-degree <=R
         """
-        vector_ids = self.vector_store.get_dbids()
-        self.graph = Graph.random_regular(verteces=vector_ids, r=self._R)
+        self.graph = Graph.random_regular(size=self.vector_store.size(), degree=self._R)
         self.entry_point = self.get_mediod()
-        
-        self._indexing_pass(alpha=1.0, vector_ids=vector_ids)
 
-        self._indexing_pass(alpha=1.2, vector_ids=vector_ids)
-                    
+        self._indexing_pass(alpha=1.0)
+
+        self._indexing_pass(alpha=1.2)
+
     def update(self, vectors: List[VectorData]) -> None:
         self.vector_store.add_batch(vectors)
         # TODO: Use incremental updates instead of a full reindexing
@@ -210,15 +211,12 @@ class VamanaIndexer:
 
         # TODO: In the future use Beam search instead
         results, _ = self.greedy_search(
-            entry_id=self.entry_point, 
-            query_vector=query_vector, 
-            k=k, 
-            L=self._L_search
+            entry_id=self.entry_point, query_vector=query_vector, k=k, L=self._L_search
         )
 
         if not results:
             return []
-        
+
         dists = self._compute_dists_batch(query_vector, results)
 
         if self._metric != MetricType.L2:
@@ -227,7 +225,8 @@ class VamanaIndexer:
             scores = 1 / (1 + dists)
 
         query_results = [
-            (score, index) for score, index in zip(scores, results)
+            (score, self.vector_store.get_dbid(idx))
+            for score, idx in zip(scores, results)
         ]
 
         query_results.sort(key=lambda x: x[0], reverse=True)
@@ -237,18 +236,10 @@ class VamanaIndexer:
     def get_mediod(self) -> int:
         sample = self.vector_store.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
 
-        if len(sample) == 1:
-            return list(sample.keys())[0]
+        centroid = np.mean(sample, axis=0)
 
-        ids = list(sample.keys())
-        vectors = np.array(list(sample.values()))
+        dists = np.linalg.norm(sample - centroid, axis=1)
 
-        centroid = np.mean(vectors, axis=0)
+        mediod = int(np.argmin(dists))
 
-        dists = np.linalg.norm(vectors - centroid, axis=1)
-
-        mediod = np.argmin(dists)
-
-        medoid_id = ids[mediod]
-
-        return medoid_id
+        return mediod
