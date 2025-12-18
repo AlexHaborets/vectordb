@@ -28,7 +28,8 @@ class CollectionRepository:
             return None
         new_collection = models.Collection(
             name = collection.name,
-            dimension = collection.dimension
+            dimension = collection.dimension,
+            metric = collection.metric
         )
         self.session.add(new_collection)
         self.session.commit()

@@ -34,20 +34,15 @@ class VamanaIndexer:
         self.vector_store = vector_store
 
         # Indexing/search parameters
-        self._dims = config.dims
-        self._L_build = config.L_build
-        self._L_search = config.L_search
-        self._R = config.R
-        self._metric = MetricType(config.metric)
+        self._dims: int = config.dims
+        self._L_build: int = config.L_build
+        self._L_search: int = config.L_search
+        self._R: int = config.R
+        self._metric: MetricType = config.metric
 
     def _compute_dists_batch(
-        self, query: np.ndarray, targets: List[int] | np.ndarray
+        self, query: np.ndarray, vectors: np.ndarray
     ) -> np.ndarray:
-        if isinstance(targets, list):
-            vectors = self.vector_store.get_batch(targets)
-        else:
-            vectors = targets
-
         if self._metric == MetricType.L2:
             return np.linalg.norm(vectors - query, axis=1)
         else:
@@ -62,9 +57,10 @@ class VamanaIndexer:
         Result: Result set L containing k-approx NNs, and
             a set V containing all the visited nodes
         """
+        entry_vector = self.vector_store.get(entry_id)
         query_entry_dist = self._compute_dists_batch(
-            query=query_vector, targets=[entry_id]
-        )[0]
+            query=query_vector, vectors=entry_vector
+        )
 
         candidates = [(query_entry_dist, entry_id)]
 
@@ -91,8 +87,9 @@ class VamanaIndexer:
 
             if not unseen_neighbors:
                 continue
-
-            dists = self._compute_dists_batch(query_vector, unseen_neighbors)
+            
+            unseen_neighbors_vectors = self.vector_store.get_batch(unseen_neighbors)
+            dists = self._compute_dists_batch(query_vector, unseen_neighbors_vectors)
 
             for id, dist in zip(unseen_neighbors, dists):
                 seen.add(id)
@@ -122,14 +119,15 @@ class VamanaIndexer:
             self.graph.set_neighbors(source, set())
             return
 
-        candidate_list = list(candidates)
+        candidate_ids = list(candidates)
+        candidate_vectors = self.vector_store.get_batch(candidate_ids)
         source_vector = self.vector_store.get(source)
         candidate_source_dists = self._compute_dists_batch(
-            source_vector, candidate_list
+            source_vector, candidate_vectors
         )
 
         candidates_sorted = sorted(
-            zip(candidate_source_dists, candidate_list), key=lambda x: x[0]
+            zip(candidate_source_dists, candidate_ids), key=lambda x: x[0]
         )
 
         neighbors: List[int] = []
@@ -217,7 +215,8 @@ class VamanaIndexer:
         if not results:
             return []
 
-        dists = self._compute_dists_batch(query_vector, results)
+        vectors = self.vector_store.get_batch(results)
+        dists = self._compute_dists_batch(query_vector, vectors)
 
         if self._metric != MetricType.L2:
             scores = 1.0 - dists
