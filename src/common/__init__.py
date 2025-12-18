@@ -8,7 +8,7 @@ from .exceptions import (
     WrongVectorDimensionsError,
 )
 from .logger import setup_logger
-from .metrics import CosineDistance, DistanceMetric, L2Distance, MetricType, get_metric
+from .metrics import  MetricType
 
 __all__ = [
     "DuplicateEntityError",
@@ -18,10 +18,6 @@ __all__ = [
     "CollectionNotFoundError",
     "VectorNotFoundError",
     "WrongVectorDimensionsError",
-    "CosineDistance",
-    "DistanceMetric",
-    "L2Distance",
     "MetricType",
     "setup_logger",
-    "get_metric",
 ]
