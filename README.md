@@ -3,7 +3,7 @@
 A lightweight, experimental vector database implementation built from scratch in Python. 
 
 This hobby project explores the mechanics of vector similarity search by implementing a custom indexer based on the Vamana Graph algorithm ([DiskANN](https://proceedings.neurips.cc/paper/2019/file/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Paper.pdf)). 
-It is designed for educational purposes and lightweight use cases, including semantic search for Retrieval Augmented Generation (RAG).
+It is designed for educational purposes and lightweight use cases, including semantic search and Retrieval Augmented Generation (RAG).
 
 ## Key Features ✨
 
