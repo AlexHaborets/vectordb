@@ -31,7 +31,7 @@ def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
         return compute_dist_cosine(a, b)
 
 
-@nb.njit(fastmath=True, parallel=True)
+@nb.njit(fastmath=True)
 def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -42,7 +42,7 @@ def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray
     return dists
 
 
-@nb.njit(fastmath=True, parallel=True)
+@nb.njit(fastmath=True)
 def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -53,7 +53,7 @@ def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.nda
     return dists
 
 
-@nb.njit(fastmath=True, parallel=True, inline="always")
+@nb.njit(fastmath=True, inline="always")
 def compute_dists_batch(
     query: np.ndarray, targets: np.ndarray, metric: int
 ) -> np.ndarray:
@@ -98,6 +98,14 @@ def insort(
 
     return curr_size
 
+@nb.njit(fastmath=True)
+def count_neighbors(neighbors_array: np.ndarray) -> int:    
+    count = 0
+    for i in range(neighbors_array.shape[0]):
+        if neighbors_array[i] == -1:
+            break
+        count+= 1
+    return count
 
 @nb.njit(fastmath=True)
 def greedy_search(
@@ -105,9 +113,9 @@ def greedy_search(
     query_vector: np.ndarray,
     k: int,
     L: int,
+    seen: np.ndarray,
     graph: np.ndarray,
     vectors: np.ndarray,
-    seen: np.ndarray,
     metric: int,
 ) -> tuple[np.ndarray, np.ndarray, List]:
     """
@@ -170,3 +178,85 @@ def greedy_search(
 
     return candidates_ids[:k], candidates_dists[:k], visited
 
+@nb.njit(fastmath=True)
+def robust_prune(
+    source_id: int, 
+    candidates_ids: np.ndarray, 
+    alpha: float,
+    R: int,
+    graph: np.ndarray,
+    vectors: np.ndarray,
+    metric: int
+) -> np.ndarray:
+    """
+    Data: Graph G, point p ∈ P , candidate set V,
+        distance threshold α ≥ 1, degree bound R
+    Result: G is modified by setting at most R new
+        out-neighbors for p
+    """
+    # Create the candidate set V ← (V ∪ Nout(p))
+    source_neighbors = graph[source_id]
+    source_neighbors_count = count_neighbors(source_neighbors)
+
+    merged_candidates = np.empty(
+        shape=candidates_ids.shape[0] + source_neighbors_count,
+        dtype=np.int32
+    )
+    merged_candidates[:candidates_ids.shape[0]] = candidates_ids
+    merged_candidates[candidates_ids.shape[0]:] = source_neighbors[:source_neighbors_count]
+
+    candidates = np.unique(merged_candidates)
+    
+    candidate_count = candidates.shape[0]
+    if candidate_count == 0:
+        return np.empty(0, dtype=np.int32)
+
+    source_vector = vectors[source_id]
+    candidate_source_dists = compute_dists_batch(
+        query=source_vector,
+        targets=vectors[candidates],
+        metric=metric
+    )
+
+    candidates_ids_sorted = np.argsort(candidate_source_dists)
+
+    # initialize empty neighbors set
+    neighbors = np.full(R, -1, dtype=np.int32)
+    neighbor_count = 0
+
+    for i in range(candidate_count):
+        if neighbor_count >= R:
+            break
+        
+        # equivalent of argmin in the algorithm
+        argmin_id = candidates_ids_sorted[i]  
+        pstar_id = candidates[argmin_id]
+
+        # equivalent of removing pstar from candidates in the algorithm
+        if pstar_id == source_id:
+            continue
+
+        pstar_dist = candidate_source_dists[argmin_id]
+        pstar_vec = vectors[pstar_id]
+
+        keep = True
+        
+        for j in range(neighbor_count):
+            neighbor_id = neighbors[j]
+            neighbor_vec = vectors[neighbor_id]
+
+            pstar_neighbor_dist = compute_dist(
+                a=pstar_vec, 
+                b=neighbor_vec, 
+                metric=metric
+            )
+
+            if alpha * pstar_neighbor_dist <= pstar_dist:
+                keep = False
+                break   
+
+        if keep:
+            neighbors[neighbor_count] = pstar_id
+            neighbor_count += 1
+
+    return neighbors
