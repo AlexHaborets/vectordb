@@ -124,6 +124,8 @@ def greedy_search(
     Result: Result set L containing k-approx NNs, and
         a set V containing all the visited nodes
     """
+    seen[:] = False
+    
     query_entry_dist = compute_dist(a=query_vector, b=vectors[entry_id], metric=metric)
 
     # create a candidate priority queue with two ndarrays

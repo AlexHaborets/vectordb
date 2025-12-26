@@ -1,11 +1,10 @@
-import bisect
-import heapq
 import random
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
+import src.engine.indexers.vamana.ops as operations
 from src.common import MetricType, config
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
@@ -38,125 +37,47 @@ class VamanaIndexer:
         self._L_build: int = config.L_build
         self._L_search: int = config.L_search
         self._R: int = config.R
-        self._metric: MetricType = config.metric
+        self._metric: int = int(config.metric)
 
-    def _compute_dists_batch(
-        self, query: np.ndarray, vectors: np.ndarray
-    ) -> np.ndarray:
-        if self._metric == MetricType.L2:
-            return np.linalg.norm(vectors - query, axis=1)
-        else:
-            return 1 - np.dot(vectors, query)
+        self._seen_mask = np.zeros(self.vector_store.size(), dtype=np.bool_)
 
-    def greedy_search(
-        self, entry_id: int, query_vector: np.ndarray, k: int, L: int
-    ) -> tuple[list[int], set[Any]]:
-        """
-        Data: Graph G with start node s, query xq, result
-            size k, search list size L ≥ k
-        Result: Result set L containing k-approx NNs, and
-            a set V containing all the visited nodes
-        """
-        entry_vector = self.vector_store.get(entry_id)
-        query_entry_dist = self._compute_dists_batch(
-            query=query_vector, vectors=entry_vector
+    def _update_mask_size(self) -> None:
+        curr_size = self.vector_store.size()
+        if self._seen_mask.shape[0] < curr_size:
+            self._seen_mask = np.zeros(curr_size, dtype=np.bool_)
+
+    def _greedy_search(
+        self, 
+        entry_id: int, 
+        query_vector: np.ndarray, 
+        k: int, 
+        L: int,
+    ) -> tuple[np.ndarray, np.ndarray, List]:
+        self._update_mask_size()
+        return operations.greedy_search(
+            entry_id=entry_id,
+            query_vector=query_vector,
+            k=k,
+            L=L,
+            seen=self._seen_mask,
+            graph=self.graph.graph,
+            vectors=self.vector_store.vectors,
+            metric=self._metric
         )
 
-        candidates = [(query_entry_dist, entry_id)]
 
-        visited = set()
-
-        seen = {entry_id}
-
-        best = [(query_entry_dist, entry_id)]
-
-        while candidates:
-            p_star_dist, p_star = heapq.heappop(candidates)  # type: ignore
-
-            if len(best) >= L and p_star_dist > best[-1][0]:
-                break
-
-            if p_star in visited:
-                continue
-
-            visited.add(p_star)
-
-            neighbors = self.graph.get_neighbors(p_star)
-
-            unseen_neighbors = [n for n in neighbors if n not in seen]
-
-            if not unseen_neighbors:
-                continue
-            
-            unseen_neighbors_vectors = self.vector_store.get_batch(unseen_neighbors)
-            dists = self._compute_dists_batch(query_vector, unseen_neighbors_vectors)
-
-            for id, dist in zip(unseen_neighbors, dists):
-                seen.add(id)
-                if len(best) >= L:
-                    if dist >= best[-1][0]:
-                        continue
-                    bisect.insort(best, (dist, id))
-                    best.pop()
-                else:
-                    bisect.insort(best, (dist, id))
-
-                heapq.heappush(candidates, (dist, id))  # type: ignore
-
-        return ([x[1] for x in best[:k]], visited)
-
-    def robust_prune(self, source: int, candidates: set[int], alpha: float) -> None:
-        """
-        Data: Graph G, point p ∈ P , candidate set V,
-            distance threshold α ≥ 1, degree bound R
-        Result: G is modified by setting at most R new
-            out-neighbors for p
-        """
-        candidates.update(self.graph.get_neighbors(source))
-        candidates.discard(source)
-
-        if not candidates:
-            self.graph.set_neighbors(source, set())
-            return
-
-        candidate_ids = list(candidates)
-        candidate_vectors = self.vector_store.get_batch(candidate_ids)
-        source_vector = self.vector_store.get(source)
-        candidate_source_dists = self._compute_dists_batch(
-            source_vector, candidate_vectors
+    def _robust_prune(self, source_id: int, candidates_ids: List[int], alpha: float) -> None:
+        neighbors = operations.robust_prune(
+            source_id=source_id,
+            candidates_ids=np.array(candidates_ids),
+            alpha=alpha,
+            R=self._R,
+            graph=self.graph.graph,
+            vectors=self.vector_store.vectors,
+            metric=self._metric
         )
 
-        candidates_sorted = sorted(
-            zip(candidate_source_dists, candidate_ids), key=lambda x: x[0]
-        )
-
-        neighbors: List[int] = []
-        neighbors_vectors: List[np.ndarray] = []
-
-        for p_star_dist, p_star in candidates_sorted:
-            if len(neighbors) >= self._R:
-                break
-
-            keep = True
-
-            if neighbors:
-                p_star_vec = self.vector_store.get(p_star)
-                p_star_neighbors = np.array(neighbors_vectors)
-
-                neighbors_dists = self._compute_dists_batch(
-                    p_star_vec, p_star_neighbors
-                )
-
-                values = alpha * neighbors_dists
-
-                if np.any(values <= p_star_dist):
-                    keep = False
-
-            if keep:
-                neighbors.append(p_star)
-                neighbors_vectors.append(self.vector_store.get(p_star))
-
-        self.graph.set_neighbors(source, set(neighbors))
+        self.graph.graph[source_id] = neighbors
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
@@ -164,27 +85,29 @@ class VamanaIndexer:
 
         for i in sigma:
             query_vector = self.vector_store.get(i)
-            (_, V) = self.greedy_search(
+            _, _, V = self._greedy_search(
                 entry_id=self.entry_point,  # type: ignore
                 query_vector=query_vector,
                 k=1,
                 L=self._L_build,
             )
 
-            self.robust_prune(source=i, candidates=V, alpha=alpha)
+            self._robust_prune(source_id=i, candidates_ids=V, alpha=alpha)
 
             query_neighbors = self.graph.get_neighbors(i)
 
             for other in query_neighbors:
-                other_neighbors = set(self.graph.get_neighbors(other))
-                other_neighbors.add(i)
+                other_neighbors = self.graph.get_neighbors(other)
+                other_neighbors.append(i)
 
                 if len(other_neighbors) > self._R:
-                    self.robust_prune(
-                        source=other, candidates=other_neighbors, alpha=alpha
+                    self._robust_prune(
+                        source_id=other, 
+                        candidates_ids=other_neighbors, 
+                        alpha=alpha
                     )
                 else:
-                    self.graph.set_neighbors(other, other_neighbors)
+                    self.graph.set_neighbors(other, set(other_neighbors))
 
     def index(self) -> None:
         """
@@ -208,15 +131,12 @@ class VamanaIndexer:
             return []
 
         # TODO: In the future use Beam search instead
-        results, _ = self.greedy_search(
+        results, dists, _ = self._greedy_search(
             entry_id=self.entry_point, query_vector=query_vector, k=k, L=self._L_search
         )
 
-        if not results:
+        if results.size == 0:
             return []
-
-        vectors = self.vector_store.get_batch(results)
-        dists = self._compute_dists_batch(query_vector, vectors)
 
         if self._metric != MetricType.L2:
             scores = 1.0 - dists
@@ -242,3 +162,5 @@ class VamanaIndexer:
         mediod = int(np.argmin(dists))
 
         return mediod
+    
+
