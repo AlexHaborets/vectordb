@@ -60,14 +60,18 @@ class VectorStore:
             new_idx = current_size + i
             self.dbid_to_idx[db_id] = new_idx
 
-    def get_random_sample(self, k: int) -> np.ndarray:
+    def get_random_sample(self, k: int) -> tuple[np.ndarray, List[int]]:
+        """
+        Returns k random vectors and 
+        """
         current_size = self.vectors.shape[0]
         if current_size > k:
             ids = random.sample(range(current_size), k)
-            return self.vectors[ids]
+            return self.vectors[ids], ids
         else:
-            return self.vectors
-        
+            return self.vectors, list(range(current_size))
+    
+    @property
     def size(self) -> int:
         return self.vectors.shape[0]
 
@@ -75,7 +79,7 @@ class VectorStore:
         return [i for i in self.dbid_to_idx.keys()]
 
     def get_idxs(self) -> List[int]:
-        return list(range(self.size()))
+        return list(range(self.size))
     
     def get_dbid(self, idx: int) -> int:
         return self.idx_to_dbid[idx]

@@ -1,19 +1,28 @@
+from _thread import LockType
+import threading
 from typing import Dict, List
 
 import numpy as np
+
 
 class Graph:
     def __init__(self, size: int, degree: int) -> None:
         self._R = degree
         self._size = size
         self.graph: np.ndarray = np.full(
-            fill_value=-1, 
-            shape=(size, degree), 
-            dtype=np.int32
+            fill_value=-1, shape=(size, degree), dtype=np.int32
         )
 
+        self._locks_count = 16384  # 2^14 should be enough for a dataset of size < 1B   
+        self._locks = [threading.Lock() for _ in range(self._locks_count)]
+
+    def get_lock(self, idx: int) -> LockType:
+        return self._locks[idx % self._locks_count]
+
     @classmethod
-    def from_db(cls, db_graph: Dict[int, List[int]], dbid_to_idx: Dict[int, int], degree: int) -> "Graph":
+    def from_db(
+        cls, db_graph: Dict[int, List[int]], dbid_to_idx: Dict[int, int], degree: int
+    ) -> "Graph":
         size = len(dbid_to_idx)
         graph = cls(size, degree)
 
@@ -22,11 +31,10 @@ class Graph:
                 continue
 
             idx = dbid_to_idx[dbid]
-            neighbors = {dbid_to_idx[n] for n in db_neigbors if n in dbid_to_idx}   
+            neighbors = {dbid_to_idx[n] for n in db_neigbors if n in dbid_to_idx}
             graph.set_neighbors(idx, neighbors)
 
         return graph
-
 
     @classmethod
     def random_regular(cls, size: int, degree: int) -> "Graph":
@@ -39,18 +47,42 @@ class Graph:
             return graph
 
         for idx in range(size):
-            candidates = np.random.choice(a=size, size=degree+1, replace=False)
+            candidates = np.random.choice(a=size, size=degree + 1, replace=False)
             candidates = candidates[candidates != idx]
             graph.graph[idx] = candidates[:degree]
 
         return graph
+
+    @property
+    def capacity(self) -> int:
+        return self.graph.shape[0]
+
+    def resize(self, new_size: int) -> None:
+        curr_capacity = self.capacity
+
+        if new_size <= curr_capacity:
+            self._size = new_size
+            return
+
+        GROWTH_FACTOR = 1.5
+
+        new_capacity = max(new_size, int(GROWTH_FACTOR * curr_capacity))
+
+        new_graph = np.full(
+            fill_value=-1, shape=(new_capacity, self._R), dtype=np.int32
+        )
+
+        new_graph[:curr_capacity, :] = self.graph
+
+        self.graph = new_graph
+        self._size = new_size
 
     def set_neighbors(self, idx: int, neighbors: set[int]) -> None:
         neighbors_list = list(neighbors)
         count = len(neighbors_list)
 
         if count > self._R:
-            neighbors_list = neighbors_list[:self._R]
+            neighbors_list = neighbors_list[: self._R]
             count = self._R
 
         self.graph[idx, :count] = neighbors_list

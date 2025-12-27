@@ -5,7 +5,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_FILE = ROOT_DIR / "data" / "vector_db.sqlite"
 DATABASE_URL = f"sqlite:///{DB_FILE}"
 
-INDEX_RND_SAMPLE_SIZE = 1000
+INDEX_RND_SAMPLE_SIZE = 512
 
 # Search list size when building the index
 VAMANA_L_BUILD = 64
