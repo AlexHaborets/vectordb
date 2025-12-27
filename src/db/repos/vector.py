@@ -144,6 +144,7 @@ class VectorRepository:
         return graph
 
     def save_graph(self, collection_id: int, graph: Dict[int, List[int]]) -> None:
+        # TODO: Insert in batches
         self.session.execute(
             models.graph_association_table.delete().where(
                 models.graph_association_table.c.collection_id == collection_id

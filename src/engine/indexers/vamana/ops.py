@@ -6,7 +6,7 @@ import numpy as np
 from src.common.config import NUMPY_DTYPE
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline="always")
 def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -15,7 +15,7 @@ def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     return np.sqrt(sum_value)
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline="always")
 def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -23,7 +23,7 @@ def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     return 1 - sum_value
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline="always")
 def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
     if metric == 0:
         return compute_dist_l2(a, b)
@@ -31,7 +31,7 @@ def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
         return compute_dist_cosine(a, b)
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline="always")
 def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -42,7 +42,7 @@ def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray
     return dists
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline="always")
 def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
