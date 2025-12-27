@@ -84,8 +84,8 @@ class IndexerManager:
             )
         )
 
-        if entry_point := indexer.entry_point:
-            db_entry_point = indexer.vector_store.get_dbid(entry_point)
+        if indexer.entry_point is not None:
+            db_entry_point = indexer.vector_store.get_dbid(indexer.entry_point)
 
             uow.collections.set_index_metadata(
                 collection_id=collection.id,

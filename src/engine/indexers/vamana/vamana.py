@@ -18,7 +18,7 @@ class VamanaConfig:
     dims: int
     metric: MetricType
     L_build: int = 64
-    L_search: int = 100
+    L_search: int = 64
     R: int = 32
 
 
@@ -30,7 +30,7 @@ class VamanaIndexer:
         graph: Optional[Graph] = None,
         entry_point: Optional[int] = None,
     ) -> None:
-        self.graph = graph if graph else Graph(size=config.dims, degree=config.R)
+        self.graph = graph if graph else Graph(size=vector_store.size, degree=config.R)
         self.entry_point = entry_point
         self.vector_store = vector_store
 
@@ -70,7 +70,7 @@ class VamanaIndexer:
 
         self.graph.graph[source_id] = neighbors
 
-    def _indexing_batch(self, batch_ids: List[int], alpha: float) -> None:
+    def _index_batch(self, batch_ids: List[int], alpha: float) -> None:
         seen = np.zeros(self.vector_store.size, dtype=np.bool_)
 
         for i in batch_ids:
@@ -94,8 +94,8 @@ class VamanaIndexer:
                     if i in other_neighbors:
                         continue
 
-                    other_neighbors.append(i) 
-                    
+                    other_neighbors.append(i)
+
                     if len(other_neighbors) > self._R:
                         self._robust_prune(
                             source_id=other, candidates_ids=other_neighbors, alpha=alpha
@@ -103,20 +103,32 @@ class VamanaIndexer:
                     else:
                         self.graph.set_neighbors(other, set(other_neighbors))
 
+    def _insert_batch(self, batch_ids: List[int], alpha: float) -> None:
+        if len(batch_ids) == 0:
+            return
+
+        if self.entry_point is None:
+            return
+
+        num_threads = os.cpu_count() or 4
+        chunk_size = max(1, len(batch_ids) // num_threads)
+
+        chunks = [
+            batch_ids[i : i + chunk_size] for i in range(0, len(batch_ids), chunk_size)
+        ]
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [
+                executor.submit(self._index_batch, chunk, alpha) for chunk in chunks
+            ]
+            for f in futures:
+                f.result()
+
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
         random.shuffle(sigma)
 
-        num_threads = os.cpu_count() or 4
-        chunk_size = max(100, len(sigma) // (num_threads * 4))
-        chunks = [sigma[i : i + chunk_size] for i in range(0, len(sigma), chunk_size)]
-
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = [
-                executor.submit(self._indexing_batch, chunk, alpha) for chunk in chunks
-            ]
-            for f in futures:
-                f.result()
+        self._insert_batch(batch_ids=sigma, alpha=alpha)
 
     def index(self) -> None:
         """
@@ -124,7 +136,7 @@ class VamanaIndexer:
         Result: Directed graph G over P with out-degree <=R
         """
         self.graph = Graph.random_regular(size=self.vector_store.size, degree=self._R)
-        self.entry_point = self.get_mediod()
+        self.entry_point = self.get_medoid()
 
         self._indexing_pass(alpha=1.0)
 
@@ -132,8 +144,21 @@ class VamanaIndexer:
 
     def update(self, vectors: List[VectorData]) -> None:
         self.vector_store.add_batch(vectors)
-        # TODO: Use incremental updates instead of a full reindexing
-        self.index()
+
+        curr_size = self.vector_store.size
+
+        should_rebuild = (
+            self.entry_point is None or curr_size < 5000 and len(vectors) > 500
+        )
+
+        if should_rebuild:
+            self.index()
+        else:
+            self.graph.resize(new_size=self.vector_store.size)
+
+            new_ids = [self.vector_store.get_idx(v.id) for v in vectors]
+
+            self._insert_batch(batch_ids=new_ids, alpha=1.2)
 
     def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if self.entry_point is None:
@@ -166,15 +191,17 @@ class VamanaIndexer:
 
         return query_results
 
-    def get_mediod(self) -> int:
-        sample_vectors, ids = self.vector_store.get_random_sample(config.INDEX_RND_SAMPLE_SIZE)
+    def get_medoid(self) -> int:
+        sample_vectors, ids = self.vector_store.get_random_sample(
+            config.INDEX_RND_SAMPLE_SIZE
+        )
 
         centroid = np.mean(sample_vectors, axis=0)
 
         dists = np.linalg.norm(sample_vectors - centroid, axis=1)
 
-        mediod = int(np.argmin(dists))
+        medoid = int(np.argmin(dists))
 
-        mediod_idx = ids[mediod]
+        medoid_idx = ids[medoid]
 
-        return mediod_idx
+        return medoid_idx
