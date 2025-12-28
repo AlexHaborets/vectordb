@@ -54,6 +54,7 @@ class Vector(VectorBase):
         from_attributes = True
         populate_by_name = True
 
+
 class VectorData(VectorBase):
     id: int
     vector: np.ndarray = Field(validation_alias="numpy_vector")
@@ -62,11 +63,7 @@ class VectorData(VectorBase):
     def from_vector(cls, v) -> "VectorData":
         if not isinstance(v, Vector):
             raise ValueError(f"Expected Vector object. Got {type(v)}")
-        return cls(
-            id = v.internal_id,
-            vector=v.numpy_vector
-        )
-
+        return cls(id=v.internal_id, vector=v.numpy_vector)
 
     class Config:
         from_attributes = True

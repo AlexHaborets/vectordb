@@ -42,7 +42,7 @@ class DBUnitOfWork(UnitOfWork):
             self.commit()
         else:
             self.rollback()
-        
+
         self.session.close()
 
     def commit(self) -> None:

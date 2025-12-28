@@ -11,6 +11,7 @@ class CollectionBase(BaseModel):
     dimension: int
     metric: MetricType
 
+
 class CollectionCreate(CollectionBase):
     pass
 
@@ -20,6 +21,7 @@ class Collection(CollectionBase):
 
     class Config:
         from_attributes = True
+
 
 class IndexMetadata(BaseModel):
     key: str

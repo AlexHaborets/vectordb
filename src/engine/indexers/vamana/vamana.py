@@ -143,12 +143,15 @@ class VamanaIndexer:
         self._indexing_pass(alpha=1.2)
 
     def update(self, vectors: List[VectorData]) -> None:
-        self.vector_store.add_batch(vectors)
+        modified_ids = self.vector_store.upsert_batch(vectors)
+
+        if not modified_ids:
+            return 
 
         curr_size = self.vector_store.size
 
         should_rebuild = (
-            self.entry_point is None or curr_size < 5000 and len(vectors) > 500
+            self.entry_point is None or curr_size < 5000 and len(modified_ids) > 500
         )
 
         if should_rebuild:
@@ -156,9 +159,7 @@ class VamanaIndexer:
         else:
             self.graph.resize(new_size=self.vector_store.size)
 
-            new_ids = [self.vector_store.get_idx(v.id) for v in vectors]
-
-            self._insert_batch(batch_ids=new_ids, alpha=1.2)
+            self._insert_batch(batch_ids=modified_ids, alpha=1.2)
 
     def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if self.entry_point is None:

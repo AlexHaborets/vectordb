@@ -98,14 +98,16 @@ def insort(
 
     return curr_size
 
+
 @nb.njit(fastmath=True)
-def count_neighbors(neighbors_array: np.ndarray) -> int:    
+def count_neighbors(neighbors_array: np.ndarray) -> int:
     count = 0
     for i in range(neighbors_array.shape[0]):
         if neighbors_array[i] == -1:
             break
-        count+= 1
+        count += 1
     return count
+
 
 @nb.njit(fastmath=True)
 def greedy_search(
@@ -125,7 +127,7 @@ def greedy_search(
         a set V containing all the visited nodes
     """
     seen[:] = False
-    
+
     query_entry_dist = compute_dist(a=query_vector, b=vectors[entry_id], metric=metric)
 
     # create a candidate priority queue with two ndarrays
@@ -180,15 +182,16 @@ def greedy_search(
 
     return candidates_ids[:k], candidates_dists[:k], visited
 
+
 @nb.njit(fastmath=True)
 def robust_prune(
-    source_id: int, 
-    candidates_ids: np.ndarray, 
+    source_id: int,
+    candidates_ids: np.ndarray,
     alpha: float,
     R: int,
     graph: np.ndarray,
     vectors: np.ndarray,
-    metric: int
+    metric: int,
 ) -> np.ndarray:
     """
     Data: Graph G, point p ∈ P , candidate set V,
@@ -201,23 +204,22 @@ def robust_prune(
     source_neighbors_count = count_neighbors(source_neighbors)
 
     merged_candidates = np.empty(
-        shape=candidates_ids.shape[0] + source_neighbors_count,
-        dtype=np.int32
+        shape=candidates_ids.shape[0] + source_neighbors_count, dtype=np.int32
     )
-    merged_candidates[:candidates_ids.shape[0]] = candidates_ids
-    merged_candidates[candidates_ids.shape[0]:] = source_neighbors[:source_neighbors_count]
+    merged_candidates[: candidates_ids.shape[0]] = candidates_ids
+    merged_candidates[candidates_ids.shape[0] :] = source_neighbors[
+        :source_neighbors_count
+    ]
 
     candidates = np.unique(merged_candidates)
-    
+
     candidate_count = candidates.shape[0]
     if candidate_count == 0:
         return np.empty(0, dtype=np.int32)
 
     source_vector = vectors[source_id]
     candidate_source_dists = compute_dists_batch(
-        query=source_vector,
-        targets=vectors[candidates],
-        metric=metric
+        query=source_vector, targets=vectors[candidates], metric=metric
     )
 
     candidates_ids_sorted = np.argsort(candidate_source_dists)
@@ -229,9 +231,9 @@ def robust_prune(
     for i in range(candidate_count):
         if neighbor_count >= R:
             break
-        
+
         # equivalent of argmin in the algorithm
-        argmin_id = candidates_ids_sorted[i]  
+        argmin_id = candidates_ids_sorted[i]
         pstar_id = candidates[argmin_id]
 
         # equivalent of removing pstar from candidates in the algorithm
@@ -242,20 +244,18 @@ def robust_prune(
         pstar_vec = vectors[pstar_id]
 
         keep = True
-        
+
         for j in range(neighbor_count):
             neighbor_id = neighbors[j]
             neighbor_vec = vectors[neighbor_id]
 
             pstar_neighbor_dist = compute_dist(
-                a=pstar_vec, 
-                b=neighbor_vec, 
-                metric=metric
+                a=pstar_vec, b=neighbor_vec, metric=metric
             )
 
             if alpha * pstar_neighbor_dist <= pstar_dist:
                 keep = False
-                break   
+                break
 
         if keep:
             neighbors[neighbor_count] = pstar_id
