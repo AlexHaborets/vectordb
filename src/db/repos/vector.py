@@ -144,7 +144,6 @@ class VectorRepository:
         return graph
 
     def save_graph(self, collection_id: int, graph: Dict[int, List[int]]) -> None:
-        # TODO: Insert in batches
         self.session.execute(
             models.graph_association_table.delete().where(
                 models.graph_association_table.c.collection_id == collection_id
@@ -156,15 +155,20 @@ class VectorRepository:
             self.session.commit()
             return
 
-        edges = [
-            {"source_id": src, "neighbor_id": nbr, "collection_id": collection_id}
-            for src, neighbors in graph.items()
-            for nbr in neighbors
-        ]
+        BATCH_SIZE = 4096
 
-        if not edges:
-            return
+        batch = []
 
-        self.session.execute(models.graph_association_table.insert().values(edges))
+        for src, neighbors in graph.items():
+            for neighbor in neighbors:
+                batch.append(
+                    {"source_id": src, "neighbor_id": neighbor, "collection_id": collection_id}
+                )
+
+                if len(batch) >= BATCH_SIZE:
+                    self.session.execute(models.graph_association_table.insert(), batch)
+                    batch = []
+        if batch:
+            self.session.execute(models.graph_association_table.insert(), batch)
 
         self.session.commit()
