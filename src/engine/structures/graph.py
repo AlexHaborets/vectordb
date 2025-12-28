@@ -13,7 +13,7 @@ class Graph:
             fill_value=-1, shape=(size, degree), dtype=np.int32
         )
 
-        self._locks_count = 16384  # 2^14 should be enough for a dataset of size < 1B   
+        self._locks_count = 16384  # 2^14 should be enough for a dataset of size < 1B
         self._locks = [threading.Lock() for _ in range(self._locks_count)]
 
     def get_lock(self, idx: int) -> LockType:

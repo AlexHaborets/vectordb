@@ -54,7 +54,7 @@ class CollectionService():
             normalized_vectors = normalize(matrix, norm='l2')
             for i in range(len(vectors)):
                 vectors[i].vector = normalized_vectors[i].tolist()
-
+        
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
 
         return [Vector.model_validate(v) for v in new_vectors]

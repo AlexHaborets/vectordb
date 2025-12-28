@@ -14,11 +14,10 @@ VAMANA_L_SEARCH = 64
 
 VAMANA_R = 32
 
-# Decimal places to round the similarity score 
-# between the query and vectors-results from search 
+# Decimal places to round the similarity score
+# between the query and vectors-results from search
 SIMILARITY_SCORE_PRECISION = 4
 
 NUMPY_DTYPE = np.float32
 
 BATCH_SIZE_LIMIT = 256
-

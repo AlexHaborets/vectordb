@@ -48,16 +48,14 @@ class IndexerManager:
             collection_id=collection.id, key="entry_point"
         )
         entry_point = (
-            vector_store.get_idx(int(entry_point_in_db)) 
-            if entry_point_in_db 
-            else None
+            vector_store.get_idx(int(entry_point_in_db)) if entry_point_in_db else None
         )
 
         graph_in_db = uow.vectors.get_graph(collection_id=collection.id)
         graph = Graph.from_db(
-            db_graph=graph_in_db, 
-            degree=vamana_config.R, 
-            dbid_to_idx=vector_store.dbid_to_idx
+            db_graph=graph_in_db,
+            degree=vamana_config.R,
+            dbid_to_idx=vector_store.dbid_to_idx,
         )
 
         indexer = VamanaIndexer(
@@ -78,10 +76,10 @@ class IndexerManager:
             raise CollectionNotFoundError(collection_name)
 
         uow.vectors.save_graph(
-            collection_id=collection.id, 
+            collection_id=collection.id,
             graph=indexer.graph.to_db_graph(
                 idx_to_dbid=indexer.vector_store.idx_to_dbid
-            )
+            ),
         )
 
         if indexer.entry_point is not None:

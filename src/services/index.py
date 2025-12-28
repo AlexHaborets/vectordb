@@ -6,16 +6,17 @@ from src.db import UnitOfWork
 from src.engine.indexer_manager import IndexerManager
 from src.schemas import Query, SearchResult, Vector, VectorData
 
+
 class IndexService:
     def __init__(self) -> None:
         pass
 
     def search(
-        self, 
+        self,
         collection_name: str,
         query: Query,
         indexer_manager: IndexerManager,
-        uow: UnitOfWork
+        uow: UnitOfWork,
     ) -> List[SearchResult]:
         indexer = indexer_manager.get_indexer(collection_name, uow)
         query_results = indexer.search(query.numpy_vector, query.k)
@@ -23,10 +24,11 @@ class IndexService:
         if not collection:
             raise CollectionNotFoundError(collection_name)
         vectors = uow.vectors.get_vectors_by_ids(
-            collection_id=collection.id,
-            ids=[result[1] for result in query_results]
+            collection_id=collection.id, ids=[result[1] for result in query_results]
         )
-        id_to_vector: Dict[int, schemas.Vector] = {v.id: schemas.Vector.model_validate(v) for v in vectors}
+        id_to_vector: Dict[int, schemas.Vector] = {
+            v.id: schemas.Vector.model_validate(v) for v in vectors
+        }
 
         results: List[SearchResult] = []
         for score, vector_id in query_results:
@@ -37,13 +39,13 @@ class IndexService:
                 )
             )
         return results
-    
+
     def update(
-        self, 
+        self,
         collection_name: str,
         vectors: List[Vector],
         indexer_manager: IndexerManager,
-        uow: UnitOfWork
+        uow: UnitOfWork,
     ) -> None:
         indexer = indexer_manager.get_indexer(collection_name, uow)
         indexer.update(vectors=[VectorData.from_vector(v) for v in vectors])

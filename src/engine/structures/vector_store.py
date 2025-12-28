@@ -40,29 +40,40 @@ class VectorStore:
 
         return self.vectors[idxs]
 
-    def add_batch(self, vectors: List[VectorData]) -> None:
-        new_vectors = [v for v in vectors if v.id not in self.dbid_to_idx]
-        if not new_vectors:
-            return
+    def upsert_batch(self, vectors: List[VectorData]) -> List[int]:
+        """
+        Upserts vectors and returns list of modified ids
+        """
+        modified_ids = []
+        new_vectors: List[np.ndarray] = []
+        new_db_ids: List[int] = []
 
-        new_db_ids = [v.id for v in new_vectors]
-        new_np_vectors = np.array(
-            [v.vector for v in new_vectors], dtype=config.NUMPY_DTYPE
-        )
+        for v in vectors:
+            if v.id in self.dbid_to_idx:
+                idx = self.dbid_to_idx[v.id]
+                self.vectors[idx] = v.vector
+                modified_ids.append(idx)
+            else:
+                new_vectors.append(v.vector)
+                new_db_ids.append(v.id)
 
-        current_size = self.vectors.shape[0]
+        if new_vectors:
+            current_size = self.size
 
-        self.vectors = np.vstack([self.vectors, new_np_vectors])
+            self.vectors = np.vstack([self.vectors, new_vectors])
 
-        self.idx_to_dbid.extend(new_db_ids)
+            self.idx_to_dbid.extend(new_db_ids)
 
-        for i, db_id in enumerate(new_db_ids):
-            new_idx = current_size + i
-            self.dbid_to_idx[db_id] = new_idx
+            for i, db_id in enumerate(new_db_ids):
+                idx = current_size + i
+                self.dbid_to_idx[db_id] = idx
+                modified_ids.append(idx)
+
+        return modified_ids
 
     def get_random_sample(self, k: int) -> tuple[np.ndarray, List[int]]:
         """
-        Returns k random vectors and 
+        Returns k random vectors and
         """
         current_size = self.vectors.shape[0]
         if current_size > k:
@@ -70,7 +81,7 @@ class VectorStore:
             return self.vectors[ids], ids
         else:
             return self.vectors, list(range(current_size))
-    
+
     @property
     def size(self) -> int:
         return self.vectors.shape[0]
@@ -80,12 +91,9 @@ class VectorStore:
 
     def get_idxs(self) -> List[int]:
         return list(range(self.size))
-    
+
     def get_dbid(self, idx: int) -> int:
         return self.idx_to_dbid[idx]
 
     def get_idx(self, dbid: int) -> int:
         return self.dbid_to_idx[dbid]
-
-
-    

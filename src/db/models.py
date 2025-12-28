@@ -44,8 +44,8 @@ graph_association_table = Table(
         Integer,
         ForeignKey("collections.id", ondelete="CASCADE"),
         nullable=False,
-        index=True, 
-    )
+        index=True,
+    ),
 )
 
 
@@ -53,7 +53,9 @@ class Vector(Base):
     __tablename__ = "vectors"
 
     __table_args__ = (
-        UniqueConstraint('collection_id', 'external_id', name='uq_collection_external_id'),
+        UniqueConstraint(
+            "collection_id", "external_id", name="uq_collection_external_id"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -74,7 +76,7 @@ class Vector(Base):
         "Vector",
         secondary=graph_association_table,
         primaryjoin=(id == graph_association_table.c.source_id),
-        secondaryjoin=(id == graph_association_table.c.neighbor_id)
+        secondaryjoin=(id == graph_association_table.c.neighbor_id),
     )
 
     vector_metadata: Mapped["VectorMetadata"] = relationship(
@@ -118,19 +120,15 @@ class Collection(Base):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     dimension: Mapped[int] = mapped_column(Integer, nullable=False)
     metric: Mapped[MetricType] = mapped_column(
-        Enum(MetricType), 
-        default=MetricType.COSINE,
-        nullable=False
+        Enum(MetricType), default=MetricType.COSINE, nullable=False
     )
 
     vectors: Mapped[List["Vector"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
-    
+
     index_metadata: Mapped[List["IndexMetadata"]] = relationship(
-        "IndexMetadata",
-        back_populates="collection",
-        cascade="all, delete-orphan"
+        "IndexMetadata", back_populates="collection", cascade="all, delete-orphan"
     )
 
 
@@ -139,14 +137,12 @@ class IndexMetadata(Base):
     __tablename__ = "index_metadata"
 
     collection_id: Mapped[int] = mapped_column(
-        ForeignKey("collections.id", ondelete="CASCADE"), 
-        primary_key=True
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True
     )
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(String, nullable=False)
 
     collection: Mapped["Collection"] = relationship(
-        "Collection",
-        back_populates="index_metadata"
+        "Collection", back_populates="index_metadata"
     )
