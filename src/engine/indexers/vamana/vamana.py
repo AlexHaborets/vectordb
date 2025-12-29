@@ -56,11 +56,11 @@ class VamanaIndexer:
         )
 
     def _robust_prune(
-        self, source_id: int, candidates_ids: List[int], alpha: float
+        self, source_id: int, candidates_ids: np.ndarray, alpha: float
     ) -> None:
-        neighbors = operations.robust_prune(
+        self.graph.graph[source_id] = operations.robust_prune(
             source_id=source_id,
-            candidates_ids=np.array(candidates_ids),
+            candidates_ids=candidates_ids,
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
@@ -68,13 +68,11 @@ class VamanaIndexer:
             metric=self._metric,
         )
 
-        self.graph.graph[source_id] = neighbors
-
     def _index_batch(self, batch_ids: List[int], alpha: float) -> None:
         seen = np.zeros(self.vector_store.size, dtype=np.bool_)
 
         for i in batch_ids:
-            query_vector = self.vector_store.get(i)
+            query_vector = self.vector_store.vectors[i]
             _, _, V = self._greedy_search(
                 entry_id=self.entry_point,  # type: ignore
                 query_vector=query_vector,
@@ -83,46 +81,71 @@ class VamanaIndexer:
                 seen=seen,
             )
 
-            self._robust_prune(source_id=i, candidates_ids=V, alpha=alpha)
+            self._robust_prune(source_id=i, candidates_ids=np.array(V), alpha=alpha)
 
-            query_neighbors = self.graph.get_neighbors(i)
+            query_neighbors = self.graph.graph[i]
 
             for other in query_neighbors:
+                # Stop if we reached the neighbor padding
+                if other == -1:
+                    break
+                
                 with self.graph.get_lock(other):
-                    other_neighbors = self.graph.get_neighbors(other)
+                    other_neighbors = self.graph.graph[other]
+                    
+                    duplicate = False
+                    empty_slot = -1
 
-                    if i in other_neighbors:
+                    for j in range(self._R):
+                        neighbor_id = other_neighbors[j]
+                        if neighbor_id == i:
+                            duplicate = True 
+                            break
+
+                        # Add i to neighbors
+                        if neighbor_id == -1:
+                            empty_slot = j
+                            break
+                    
+                    if duplicate:
                         continue
-
-                    other_neighbors.append(i)
-
-                    if len(other_neighbors) > self._R:
+                    
+                    # Means there are now more than
+                    if empty_slot == -1:
                         self._robust_prune(
-                            source_id=other, candidates_ids=other_neighbors, alpha=alpha
+                            source_id=other, 
+                            # In the algorithm the candidates is other_neighbors + i
+                            # But robust prune already adds the neighbors so we can 
+                            # just pass i by itself
+                            candidates_ids=np.array([i], dtype=np.int32),   
+                            alpha=alpha 
                         )
                     else:
-                        self.graph.set_neighbors(other, set(other_neighbors))
+                        # other_neighbors is a ref so we are modifying the graph itself
+                        other_neighbors[empty_slot] = i
 
     def _insert_batch(self, batch_ids: List[int], alpha: float) -> None:
         if len(batch_ids) == 0:
             return
 
-        if self.entry_point is None:
-            return
+        # Only use multithreading if  
+        # there are more than 500 vectors in batch
+        if len(batch_ids) <= 500:
+            self._index_batch(batch_ids, alpha)
+        else:
+            num_threads = os.cpu_count() or 4
+            chunk_size = max(1, len(batch_ids) // num_threads)
 
-        num_threads = os.cpu_count() or 4
-        chunk_size = max(1, len(batch_ids) // num_threads)
-
-        chunks = [
-            batch_ids[i : i + chunk_size] for i in range(0, len(batch_ids), chunk_size)
-        ]
-
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = [
-                executor.submit(self._index_batch, chunk, alpha) for chunk in chunks
+            chunks = [
+                batch_ids[i : i + chunk_size] for i in range(0, len(batch_ids), chunk_size)
             ]
-            for f in futures:
-                f.result()
+
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = [
+                    executor.submit(self._index_batch, chunk, alpha) for chunk in chunks
+                ]
+                for f in futures:
+                    f.result()
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
