@@ -109,7 +109,7 @@ class VectorRepository:
                 )
                 self.session.add(new_vector)
                 results.append(new_vector)
-
+            
         self.session.commit()
 
         for v in results:
