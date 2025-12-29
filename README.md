@@ -9,11 +9,11 @@ It is designed for educational purposes and lightweight use cases, including sem
 
 > ⚠️ **Note:** This project is a **work in progress**. Some features are incomplete and are subject to change.
 
--   **Vamana Graph Indexing:** Implements the Vamana graph algorithm for efficient approximate nearest neighbor (ANN) search.
+-   **Vamana Graph Indexing:** Implements the Vamana graph algorithm for efficient approximate nearest neighbor (ANN) search. Optimized with [Numba](https://numba.pydata.org/).  
+-   **Persistence:** Uses a single SQLite database, managed via [SQLAlchemy](https://www.sqlalchemy.org/) and [Alembic](https://alembic.sqlalchemy.org/en/latest/).
 -   **Collection Management:** Supports creating and managing distinct collections of vectors.
 -   **RESTful API:** Fully interactive API built with [FastAPI](https://fastapi.tiangolo.com/).
--   **Persistence:** Uses a single SQLite database for metadata storage, managed via [SQLAlchemy](https://www.sqlalchemy.org/) and [Alembic](https://alembic.sqlalchemy.org/en/latest/).
--   **Python Client:** Includes a minimal client library for database interaction.
+-   **Python Client:** Includes a minimal client library for database interaction (WIP).
 
 ## Documentation
 
