@@ -1,9 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
-import os
-import random
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+import numba
 import numpy as np
 
 import src.engine.indexers.vamana.ops as operations
@@ -43,7 +41,10 @@ class VamanaIndexer:
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int, seen: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, List]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        A helper wrapper for greedy search
+        """
         return operations.greedy_search(
             entry_id=entry_id,
             query_vector=query_vector,
@@ -58,7 +59,10 @@ class VamanaIndexer:
     def _robust_prune(
         self, source_id: int, candidates_ids: np.ndarray, alpha: float
     ) -> None:
-        self.graph.graph[source_id] = operations.robust_prune(
+        """
+        A helper wrapper for robust prune
+        """
+        operations.robust_prune(
             source_id=source_id,
             candidates_ids=candidates_ids,
             alpha=alpha,
@@ -68,90 +72,37 @@ class VamanaIndexer:
             metric=self._metric,
         )
 
-    def _index_batch(self, batch_ids: List[int], alpha: float) -> None:
-        seen = np.zeros(self.vector_store.size, dtype=np.bool_)
+    def _index_batch(self, batch_ids: np.ndarray, alpha: float) -> None:
+        num_threads = numba.config.NUMBA_NUM_THREADS  # type: ignore
+        seen = np.zeros(shape=(num_threads, self.vector_store.size), dtype=np.bool_)
 
-        for i in batch_ids:
-            query_vector = self.vector_store.vectors[i]
-            _, _, V = self._greedy_search(
-                entry_id=self.entry_point,  # type: ignore
-                query_vector=query_vector,
-                k=1,
-                L=self._L_build,
-                seen=seen,
-            )
+        operations.forward_indexing_pass(
+            batch_ids=batch_ids,
+            alpha=alpha,
+            R=self._R,
+            L=self._L_build,
+            seen=seen,
+            entry_point=self.entry_point,  # type: ignore
+            graph=self.graph.graph,
+            vectors=self.vector_store.vectors,
+            metric=self._metric,
+        )
 
-            self._robust_prune(source_id=i, candidates_ids=np.array(V), alpha=alpha)
-
-            query_neighbors = self.graph.graph[i]
-
-            for other in query_neighbors:
-                # Stop if we reached the neighbor padding
-                if other == -1:
-                    break
-                
-                with self.graph.get_lock(other):
-                    other_neighbors = self.graph.graph[other]
-                    
-                    duplicate = False
-                    empty_slot = -1
-
-                    for j in range(self._R):
-                        neighbor_id = other_neighbors[j]
-                        if neighbor_id == i:
-                            duplicate = True 
-                            break
-
-                        # Add i to neighbors
-                        if neighbor_id == -1:
-                            empty_slot = j
-                            break
-                    
-                    if duplicate:
-                        continue
-                    
-                    # Means there are now more than
-                    if empty_slot == -1:
-                        self._robust_prune(
-                            source_id=other, 
-                            # In the algorithm the candidates is other_neighbors + i
-                            # But robust prune already adds the neighbors so we can 
-                            # just pass i by itself
-                            candidates_ids=np.array([i], dtype=np.int32),   
-                            alpha=alpha 
-                        )
-                    else:
-                        # other_neighbors is a ref so we are modifying the graph itself
-                        other_neighbors[empty_slot] = i
-
-    def _insert_batch(self, batch_ids: List[int], alpha: float) -> None:
-        if len(batch_ids) == 0:
-            return
-
-        # Only use multithreading if  
-        # there are more than 500 vectors in batch
-        if len(batch_ids) <= 500:
-            self._index_batch(batch_ids, alpha)
-        else:
-            num_threads = os.cpu_count() or 4
-            chunk_size = max(1, len(batch_ids) // num_threads)
-
-            chunks = [
-                batch_ids[i : i + chunk_size] for i in range(0, len(batch_ids), chunk_size)
-            ]
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                futures = [
-                    executor.submit(self._index_batch, chunk, alpha) for chunk in chunks
-                ]
-                for f in futures:
-                    f.result()
+        operations.backward_indexing_pass(
+            batch_ids=batch_ids,
+            alpha=alpha,
+            R=self._R,
+            L=self._L_build,
+            graph=self.graph.graph,
+            vectors=self.vector_store.vectors,
+            metric=self._metric,
+        )
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
-        random.shuffle(sigma)
+        np.random.shuffle(sigma)
 
-        self._insert_batch(batch_ids=sigma, alpha=alpha)
+        self._index_batch(batch_ids=sigma, alpha=alpha)
 
     def index(self) -> None:
         """
@@ -168,13 +119,13 @@ class VamanaIndexer:
     def update(self, vectors: List[VectorData]) -> None:
         modified_ids = self.vector_store.upsert_batch(vectors)
 
-        if not modified_ids:
-            return 
+        if modified_ids.size == 0:
+            return
 
         curr_size = self.vector_store.size
 
         should_rebuild = (
-            self.entry_point is None or curr_size < 5000 and len(modified_ids) > 500
+            self.entry_point is None or curr_size < 10000 and len(modified_ids) > 1000
         )
 
         if should_rebuild:
@@ -182,7 +133,7 @@ class VamanaIndexer:
         else:
             self.graph.resize(new_size=self.vector_store.size)
 
-            self._insert_batch(batch_ids=modified_ids, alpha=1.2)
+            self._index_batch(batch_ids=np.array(modified_ids), alpha=1.2)
 
     def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if self.entry_point is None:

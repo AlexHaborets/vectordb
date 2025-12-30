@@ -5,6 +5,9 @@ from src.common import config
 
 
 def configure_db(connection, connection_record) -> None:
+    """
+    Some optimizations for the sqlite database
+    """
     cursor = connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
@@ -18,7 +21,8 @@ class SessionManager:
         if not url:
             raise ValueError("SessionManager requires database url.")
         
-        self.engine = create_engine(url)
+        # check_same_thread is set to False for multithreading
+        self.engine = create_engine(url, connect_args={"check_same_thread": False})
 
         event.listen(target=self.engine, identifier="connect", fn=configure_db)
 
