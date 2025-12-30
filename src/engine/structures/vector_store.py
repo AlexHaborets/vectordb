@@ -40,11 +40,12 @@ class VectorStore:
 
         return self.vectors[idxs]
 
-    def upsert_batch(self, vectors: List[VectorData]) -> List[int]:
+    def upsert_batch(self, vectors: List[VectorData]) -> np.ndarray:
         """
         Upserts vectors and returns list of modified ids
         """
-        modified_ids = []
+        modified_ids: np.ndarray = np.empty_like(vectors, dtype=np.int32)
+        modified_count = 0
         new_vectors: List[np.ndarray] = []
         new_db_ids: List[int] = []
 
@@ -52,7 +53,8 @@ class VectorStore:
             if v.id in self.dbid_to_idx:
                 idx = self.dbid_to_idx[v.id]
                 self.vectors[idx] = v.vector
-                modified_ids.append(idx)
+                modified_ids[modified_count] = idx
+                modified_count += 1
             else:
                 new_vectors.append(v.vector)
                 new_db_ids.append(v.id)
@@ -67,15 +69,16 @@ class VectorStore:
             for i, db_id in enumerate(new_db_ids):
                 idx = current_size + i
                 self.dbid_to_idx[db_id] = idx
-                modified_ids.append(idx)
+                modified_ids[modified_count] = idx
+                modified_count += 1
 
         return modified_ids
 
     def get_random_sample(self, k: int) -> tuple[np.ndarray, List[int]]:
         """
-        Returns k random vectors and
+        Returns k random vectors and a list of their ids
         """
-        current_size = self.vectors.shape[0]
+        current_size = self.size
         if current_size > k:
             ids = random.sample(range(current_size), k)
             return self.vectors[ids], ids
@@ -89,8 +92,8 @@ class VectorStore:
     def get_dbids(self) -> List[int]:
         return [i for i in self.dbid_to_idx.keys()]
 
-    def get_idxs(self) -> List[int]:
-        return list(range(self.size))
+    def get_idxs(self) -> np.ndarray:
+        return np.arange(self.size)
 
     def get_dbid(self, idx: int) -> int:
         return self.idx_to_dbid[idx]
