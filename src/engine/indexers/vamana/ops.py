@@ -4,7 +4,7 @@ import numpy as np
 from src.common.config import NUMPY_DTYPE
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -13,7 +13,7 @@ def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     return np.sqrt(sum_value)
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -21,7 +21,7 @@ def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     return 1 - sum_value
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
     if metric == 0:
         return compute_dist_l2(a, b)
@@ -29,7 +29,7 @@ def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
         return compute_dist_cosine(a, b)
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -40,7 +40,7 @@ def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray
     return dists
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -51,7 +51,7 @@ def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.nda
     return dists
 
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dists_batch(
     query: np.ndarray, targets: np.ndarray, metric: int
 ) -> np.ndarray:
@@ -61,7 +61,7 @@ def compute_dists_batch(
         return compute_dists_batch_cosine(query, targets)
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, cache=True)
 def insort(
     ids: np.ndarray,
     dists: np.ndarray,
@@ -97,7 +97,7 @@ def insort(
     return curr_size
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, cache=True)
 def count_neighbors(neighbors_array: np.ndarray) -> int:
     count = 0
     for i in range(neighbors_array.shape[0]):
@@ -107,7 +107,7 @@ def count_neighbors(neighbors_array: np.ndarray) -> int:
     return count
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, cache=True)
 def greedy_search(
     entry_id: int,
     query_vector: np.ndarray,
@@ -186,7 +186,7 @@ def greedy_search(
     return candidates_ids[:k], candidates_dists[:k], visited[:visited_count]
 
 
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, cache=True)
 def robust_prune(
     source_id: int,
     candidates_ids: np.ndarray,
@@ -271,7 +271,7 @@ def robust_prune(
     graph[source_id] = neighbors
 
 
-@nb.njit(fastmath=True, parallel=True, nogil=True)
+@nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
 def forward_indexing_pass(
     batch_ids: np.ndarray, 
     alpha: float,
@@ -314,7 +314,7 @@ def forward_indexing_pass(
             metric=metric
         )
 
-@nb.njit(fastmath=True, parallel=True, nogil=True)
+@nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
 def backward_indexing_pass(
     batch_ids: np.ndarray, 
     alpha: float,

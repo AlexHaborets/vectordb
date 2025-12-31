@@ -49,4 +49,3 @@ class IndexService:
     ) -> None:
         indexer = indexer_manager.get_indexer(collection_name, uow)
         indexer.update(vectors=[VectorData.from_vector(v) for v in vectors])
-        indexer_manager.save_to_db(collection_name, uow)
