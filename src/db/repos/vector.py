@@ -1,10 +1,12 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Query, joinedload
 from sqlalchemy.orm.session import Session
 
+from src.common.utils import vector_to_bytes
 import src.db.models as models
 import src.schemas as schemas
 
@@ -61,61 +63,69 @@ class VectorRepository:
     def upsert_vectors(
         self, collection_id: int, vectors: List[schemas.VectorCreate]
     ) -> List[models.Vector]:
-        new_ids = [v.id for v in vectors]
+        if not vectors:
+            return []
 
-        existing_vectors = (
-            self.session.query(models.Vector)
-            .filter(
-                models.Vector.collection_id == collection_id,
-                models.Vector.external_id.in_(new_ids),
-            )
-            .all()
-        )
-
-        existing_map = {v.external_id: v for v in existing_vectors}
-
-        results = []
+        vector_values: List[Dict] = []
 
         for v in vectors:
-            existing_vec = existing_map.get(v.id)
+            vector_values.append(
+                {
+                    "collection_id": collection_id,
+                    "external_id": v.id,
+                    "vector_blob": vector_to_bytes(v.vector),
+                    "deleted": False,
+                }
+            )
 
-            if existing_vec:
-                existing_vec.vector = v.vector
+        stmt = insert(models.Vector).values(vector_values)
 
-                if existing_vec.deleted:
-                    existing_vec.deleted = False
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["collection_id", "external_id"],
+            set_={"vector_blob": stmt.excluded.vector_blob, "deleted": False},
+        )
 
-                if existing_vec.vector_metadata:
-                    existing_vec.vector_metadata.source = v.metadata.source
-                    existing_vec.vector_metadata.content = v.metadata.content
-                else:
-                    # If for some obscure and unknown reason vector metadata doesn't exist:
-                    existing_vec.vector_metadata = models.VectorMetadata(
-                        source=v.metadata.source, content=v.metadata.content
-                    )
+        # Instead of refreshing, we are going to construct the list of models.Vector
+        # by ourselves using the return sql stmt
+        stmt = stmt.returning(models.Vector)
 
-                results.append(existing_vec)
+        vectors_in_db = self.session.execute(stmt).scalars().all()
 
-            else:
-                metadata = models.VectorMetadata(
-                    source=v.metadata.source,
-                    content=v.metadata.content,
-                )
-                new_vector = models.Vector(
-                    collection_id=collection_id,
-                    external_id=v.id,
-                    vector=v.vector,
-                    vector_metadata=metadata,
-                )
-                self.session.add(new_vector)
-                results.append(new_vector)
-            
+        id_map = {v.external_id: v.id for v in vectors_in_db}
+
+        metadata_data = [
+            {
+                "vector_id": id_map[v.id],
+                "source": v.metadata.source,
+                "content": v.metadata.content,
+            }
+            for v in vectors
+            if v.id in id_map
+        ]
+
+        if metadata_data:
+            stmt = insert(models.VectorMetadata).values(metadata_data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["vector_id"],
+                set_={"source": stmt.excluded.source, "content": stmt.excluded.content},
+            )
+            self.session.execute(stmt)
+
         self.session.commit()
 
-        for v in results:
-            self.session.refresh(v)
+        meta_map = {meta["vector_id"]: meta for meta in metadata_data}
 
-        return results
+        # "Refresh" vectors inplace instead of doing a query which is slow
+        for v in vectors_in_db:
+            if v.id in meta_map:
+                metadata = meta_map[v.id]
+                v.vector_metadata = models.VectorMetadata(
+                    vector_id=v.id,
+                    source=metadata["source"],
+                    content=metadata["content"],
+                )
+
+        return list(vectors_in_db)
 
     def mark_vector_deleted(self, collection_id: int, vector_id: str) -> bool:
         result = self.session.execute(
@@ -162,7 +172,11 @@ class VectorRepository:
         for src, neighbors in graph.items():
             for neighbor in neighbors:
                 batch.append(
-                    {"source_id": src, "neighbor_id": neighbor, "collection_id": collection_id}
+                    {
+                        "source_id": src,
+                        "neighbor_id": neighbor,
+                        "collection_id": collection_id,
+                    }
                 )
 
                 if len(batch) >= BATCH_SIZE:
