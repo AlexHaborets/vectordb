@@ -62,12 +62,13 @@ def get_all(
     with uow:
         return collection_service.get_all_vectors(collection_name, uow)
 
+# TODO: Implement deletion
 
-@vector_router.delete("", response_model=Vector, status_code=201)
-def delete_by_id(
-    collection_name: str,
-    vector_id: str,
-    uow: Annotated[UnitOfWork, Depends(get_uow)],
-) -> None:
-    with uow:
-        collection_service.delete_vector(collection_name, vector_id, uow)
+# @vector_router.delete("", response_model=Vector, status_code=201)
+# def delete_by_id(
+#     collection_name: str,
+#     vector_id: str,
+#     uow: Annotated[UnitOfWork, Depends(get_uow)],
+# ) -> None:
+#     with uow:
+#         collection_service.delete_vector(collection_name, vector_id, uow)
