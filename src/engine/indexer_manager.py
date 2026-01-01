@@ -1,7 +1,5 @@
 from typing import Dict
 
-from loguru import logger
-
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
@@ -103,5 +101,4 @@ class IndexerManager:
             collection = uow.collections.get_collection_by_name(collection_name)
             collection_id = collection.id  # type: ignore
             if uow.vectors.get_unindexed_vector_ids(collection_id):
-                logger.info(f"Saving {collection_name} index to disk...")
                 self.save_to_db(collection_name, uow)
