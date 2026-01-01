@@ -1,14 +1,12 @@
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends
-from loguru import logger
 
 from src.api.dependencies import get_indexer_manager, get_uow
 from src.db import UnitOfWork
 from src.engine import IndexerManager
 from src.schemas import UpsertBatch, Vector
 from src.services import CollectionService, IndexService
-import time
 
 vector_router = APIRouter(
     prefix="/collections/{collection_name}/vectors", tags=["vectors"]
@@ -26,24 +24,15 @@ def upsert(
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[Vector]:
     with uow:
-        db_start = time.perf_counter()
         vectors_in_db = collection_service.upsert_vectors(
             collection_name, batch.vectors, uow
         )
-        db_end = time.perf_counter()
-        logger.info(f"DB upsert time = {db_end - db_start}")
-
-        indexer_start = time.perf_counter()
         index_service.update(
             collection_name=collection_name,
             vectors=vectors_in_db,
             indexer_manager=indexer_manager,
             uow=uow,
         )
-        indexer_end = time.perf_counter()
-        logger.info(f"Indexer upsert time = {indexer_end - indexer_start}")
-        logger.info(f"Total upsert time = {db_end - db_start + indexer_end - indexer_start}")
-
         return vectors_in_db
 
 

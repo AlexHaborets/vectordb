@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,13 +20,16 @@ from apscheduler.triggers.interval import IntervalTrigger
 from src.db.uow import DBUnitOfWork
 
 
-async def save_indexers():
-    logger.info("Saving unsaved indexes to disk...")
+def _save_indexers() -> None:
     indexer_manager = get_indexer_manager()
     uow = DBUnitOfWork(session_manager.get_session_factory())
     with uow:
         indexer_manager.save_all(uow)
 
+
+async def save_indexers() -> None:
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _save_indexers)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,8 +51,9 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down vector db...")
 
-    scheduler.shutdown()
+    scheduler.shutdown(wait=False)
 
+    logger.info("Saving indexes to disk...")
     await save_indexers()
 
     session_manager.close()
