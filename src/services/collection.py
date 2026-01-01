@@ -1,7 +1,5 @@
-import time
 from typing import List
 
-from loguru import logger
 import numpy as np
 
 from src.common import MetricType
@@ -59,11 +57,7 @@ class CollectionService():
         
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
 
-
-        start = time.perf_counter()
         result = [Vector.model_validate(v) for v in new_vectors]
-        end = time.perf_counter()
-        logger.info(f"Validation took: {end - start}")
         return result
     
     def get_vector(self, collection_name: str, vector_id: str, uow: UnitOfWork) -> Vector:

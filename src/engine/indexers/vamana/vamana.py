@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import numba
 import numpy as np
 
 import src.engine.indexers.vamana.ops as operations
@@ -73,15 +72,11 @@ class VamanaIndexer:
         )
 
     def _index_batch(self, batch_ids: np.ndarray, alpha: float) -> None:
-        num_threads = numba.config.NUMBA_NUM_THREADS  # type: ignore
-        seen = np.zeros(shape=(num_threads, self.vector_store.size), dtype=np.bool_)
-
         operations.forward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
             R=self._R,
             L=self._L_build,
-            seen=seen,
             entry_point=self.entry_point,  # type: ignore
             graph=self.graph.graph,
             vectors=self.vector_store.vectors,
@@ -116,16 +111,22 @@ class VamanaIndexer:
 
         self._indexing_pass(alpha=1.2)
 
-    def update(self, vectors: List[VectorData]) -> None:
-        modified_ids = self.vector_store.upsert_batch(vectors)
-
-        if modified_ids.size == 0:
+    def update(self, vectors: List[VectorData] | List[int]) -> None:
+        if not vectors:
             return
+        
+        if isinstance(vectors[0], int):
+            batch_ids = vectors
+        else:
+            batch_ids = self.vector_store.upsert_batch(vectors) # type: ignore
+
+            if batch_ids.size == 0:
+                return
 
         curr_size = self.vector_store.size
 
         should_rebuild = (
-            self.entry_point is None or curr_size < 10000 and len(modified_ids) > 1000
+            self.entry_point is None or curr_size < 10000 and len(batch_ids) > 1000
         )
 
         if should_rebuild:
@@ -133,7 +134,7 @@ class VamanaIndexer:
         else:
             self.graph.resize(new_size=self.vector_store.size)
 
-            self._index_batch(batch_ids=np.array(modified_ids), alpha=1.2)
+            self._index_batch(batch_ids=np.array(batch_ids), alpha=1.2)
 
     def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if self.entry_point is None:

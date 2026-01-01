@@ -186,3 +186,23 @@ class VectorRepository:
             self.session.execute(models.graph_association_table.insert(), batch)
 
         self.session.commit()
+
+    def get_unindexed_vector_ids(self, collection_id: int) -> List[int]:
+        # Perform a left outer join to get the ids of vectors that are in collection
+        # but not in the graph
+        stmt = (
+            select(models.Vector.id)
+            .outerjoin(
+                target=models.graph_association_table,
+                onclause=(models.Vector.id == models.graph_association_table.c.source_id) &
+                         (models.Vector.collection_id == models.graph_association_table.c.collection_id)
+            )
+            .where(
+                models.Vector.collection_id == collection_id,
+                models.Vector.deleted == False, # noqa: E712
+                models.graph_association_table.c.source_id == None  # noqa: E711
+            )
+        )
+        
+        result = self.session.execute(stmt)
+        return list(result.scalars().all())

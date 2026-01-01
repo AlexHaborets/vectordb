@@ -4,6 +4,7 @@ import numpy as np
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_FILE = ROOT_DIR / "data" / "vector_db.sqlite"
 DATABASE_URL = f"sqlite:///{DB_FILE}"
+AUTO_SAVE_INDEX_PERIOD = 60 # seconds
 
 INDEX_RND_SAMPLE_SIZE = 512
 
@@ -21,3 +22,5 @@ SIMILARITY_SCORE_PRECISION = 4
 NUMPY_DTYPE = np.float32
 
 BATCH_SIZE_LIMIT = 2048
+
+

@@ -1,5 +1,7 @@
 from typing import Dict
 
+from loguru import logger
+
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
@@ -64,6 +66,11 @@ class IndexerManager:
             graph=graph,
             entry_point=entry_point,
         )
+
+        unindexed_vectors = uow.vectors.get_unindexed_vector_ids(collection_id=collection.id)
+        if unindexed_vectors:
+            indexer.update(unindexed_vectors)
+
         return indexer
 
     def save_to_db(self, collection_name: str, uow: UnitOfWork) -> None:
@@ -91,6 +98,10 @@ class IndexerManager:
                 value=str(db_entry_point),
             )
 
-    def save_all(self, uow: UnitOfWork):
-        for collection in self._indexers.keys():
-            self.save_to_db(collection, uow)
+    def save_all(self, uow: UnitOfWork) -> None:
+        for collection_name in self._indexers.keys():
+            collection = uow.collections.get_collection_by_name(collection_name)
+            collection_id = collection.id  # type: ignore
+            if uow.vectors.get_unindexed_vector_ids(collection_id):
+                logger.info(f"Saving {collection_name} index to disk...")
+                self.save_to_db(collection_name, uow)
