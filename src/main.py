@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api import collection_router, search_router, vector_router
-from src.api.dependencies import get_indexer_manager
+from src.api.dependencies import get_indexer_manager, get_scheduler
 from src.api.exception_handlers import create_exception_handler
 from src.common import (
     DuplicateEntityError,
@@ -12,24 +12,44 @@ from src.common import (
     InvalidOperationError,
     setup_logger,
 )
+from src.common.config import AUTO_SAVE_INDEX_PERIOD
 from src.db import session_manager
+from apscheduler.triggers.interval import IntervalTrigger
+
 from src.db.uow import DBUnitOfWork
+
+
+async def save_indexers():
+    logger.info("Saving unsaved indexes to disk...")
+    indexer_manager = get_indexer_manager()
+    uow = DBUnitOfWork(session_manager.get_session_factory())
+    with uow:
+        indexer_manager.save_all(uow)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting vector db...")
     setup_logger()
 
-    logger.info("Starting vector db...")
+    scheduler = get_scheduler()
+    scheduler.add_job(
+        func=save_indexers,
+        id="auto_save_indexers",
+        trigger=IntervalTrigger(seconds=AUTO_SAVE_INDEX_PERIOD),
+        replace_existing=True,
+    )
+
+    scheduler.start()
+
+    logger.info("Vector db started successfully")
 
     yield
     logger.info("Shutting down vector db...")
 
-    uow = DBUnitOfWork(session_manager.sessionmaker)
+    scheduler.shutdown()
 
-    with uow:
-        logger.info("Saving indexes to disk...")
-        get_indexer_manager().save_all(uow)
+    await save_indexers()
 
     session_manager.close()
 

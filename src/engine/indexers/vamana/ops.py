@@ -277,7 +277,6 @@ def forward_indexing_pass(
     alpha: float,
     R: int,
     L: int,
-    seen: np.ndarray,
     entry_point: int,
     graph: np.ndarray,
     vectors: np.ndarray,
@@ -290,15 +289,15 @@ def forward_indexing_pass(
     batch_size = batch_ids.shape[0]
 
     for i in nb.prange(batch_size):
+        seen = np.zeros(vectors.shape[0], dtype=np.bool_)
         query_id = batch_ids[i]
         query_vector = vectors[query_id]
-        thread_id = nb.get_thread_id()
         _, _, V = greedy_search(
             entry_id=entry_point,
             query_vector=query_vector,
             k=1,
             L=L,
-            seen=seen[thread_id],
+            seen=seen,
             graph=graph,
             vectors=vectors,
             metric=metric

@@ -44,7 +44,7 @@ class VectorStore:
         """
         Upserts vectors and returns list of modified ids
         """
-        modified_ids: np.ndarray = np.empty_like(vectors, dtype=np.int32)
+        modified_ids: np.ndarray = np.empty(shape=len(vectors), dtype=np.int32)
         modified_count = 0
         new_vectors: List[np.ndarray] = []
         new_db_ids: List[int] = []
