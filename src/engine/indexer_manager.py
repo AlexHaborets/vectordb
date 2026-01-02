@@ -38,9 +38,7 @@ class IndexerManager:
             R=config.VAMANA_R,
         )
 
-        vectors_in_db = uow.vectors.get_all_vectors(
-            collection.id, include_metadata=False
-        )
+        vectors_in_db = uow.vectors.get_all_vectors(collection.id)
         vectors = [VectorData.model_validate(v) for v in vectors_in_db]
         vector_store = VectorStore(dims=collection.dimension, vectors=vectors)
 

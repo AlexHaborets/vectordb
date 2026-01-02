@@ -1,9 +1,10 @@
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 from numpy.typing import NDArray
 from sqlalchemy import (
     BLOB,
+    JSON,
     Boolean,
     Column,
     Enum,
@@ -11,7 +12,6 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -79,9 +79,11 @@ class Vector(Base):
         secondaryjoin=(id == graph_association_table.c.neighbor_id),
     )
 
-    vector_metadata: Mapped["VectorMetadata"] = relationship(
-        back_populates="vector", cascade="all, delete-orphan"
-    )
+    vector_metadata: Mapped[Dict] =  mapped_column(JSON, nullable=True)
+
+    # vector_metadata: Mapped["VectorMetadata"] = relationship(
+    #     back_populates="vector", cascade="all, delete-orphan"
+    # )
 
     @property
     def numpy_vector(self) -> NDArray[NUMPY_DTYPE]:
@@ -100,17 +102,17 @@ class Vector(Base):
         self.numpy_vector = np.array(value)
 
 
-class VectorMetadata(Base):
-    __tablename__ = "vector_metadata"
+# class VectorMetadata(Base):
+#     __tablename__ = "vector_metadata"
 
-    vector_id: Mapped[str] = mapped_column(
-        ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
-    )
+#     vector_id: Mapped[str] = mapped_column(
+#         ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
+#     )
 
-    source: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+#     source: Mapped[str] = mapped_column(String, nullable=False)
+#     content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")
+#     vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")
 
 
 class Collection(Base):

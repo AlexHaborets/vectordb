@@ -1,26 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, Dict, List
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator
 
 from src.common.config import BATCH_SIZE_LIMIT, NUMPY_DTYPE
-
-
-class VectorMetadataBase(BaseModel):
-    source: str
-    content: str
-
-
-class VectorMetadataCreate(VectorMetadataBase):
-    pass
-
-
-class VectorMetadata(VectorMetadataBase):
-    class Config:
-        from_attributes = True
-
 
 class VectorBase(BaseModel):
     pass
@@ -29,7 +14,7 @@ class VectorBase(BaseModel):
 class VectorCreate(VectorBase):
     id: str
     vector: List[float]
-    metadata: VectorMetadataCreate
+    metadata: Dict[str, Any] | None = None 
 
 
 class Vector(VectorBase):
@@ -37,7 +22,7 @@ class Vector(VectorBase):
     internal_id: int = Field(validation_alias="id", exclude=True)
 
     vector: List[float]
-    metadata: VectorMetadata = Field(validation_alias="vector_metadata")
+    metadata: Dict[str, Any] | None = Field(validation_alias="vector_metadata", default=None)
 
     @field_validator("vector", mode="before")
     @classmethod
