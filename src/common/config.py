@@ -4,7 +4,7 @@ import numpy as np
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_FILE = ROOT_DIR / "data" / "vector_db.sqlite"
 DATABASE_URL = f"sqlite:///{DB_FILE}"
-AUTO_SAVE_INDEX_PERIOD = 60 # seconds
+AUTO_SAVE_INDEX_PERIOD = 5 # seconds
 
 INDEX_RND_SAMPLE_SIZE = 512
 

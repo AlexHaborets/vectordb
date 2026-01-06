@@ -1,18 +1,24 @@
 from typing import List
-from client import models
-from client.collection import Collection
-from client.errors import NotFoundError
-from client.transport import Transport
-from client.config import DEFAULT_DB_URL
-from client.models import Metric
+from vectordb.models import Collection as CollectionModel
+from vectordb.collection import Collection
+from vectordb.errors import NotFoundError
+from vectordb.transport import Transport
+from vectordb.config import DEFAULT_DB_URL
+from vectordb.types import Metric
 
 
 class Client:
     def __init__(self, url: str = DEFAULT_DB_URL) -> None:
         self._transport = Transport(base_url=url)
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self):
+        self._transport.close()
+
     def create_collection(self, name: str, dimension: int, metric: Metric) -> Collection:
-        payload = models.Collection(
+        payload = CollectionModel(
             name=name, 
             dimension=dimension, 
             metric=metric

@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 
-from client.models import SearchResult, Vector
-from client.transport import Transport
+from vectordb.models import SearchResult, Vector
+from vectordb.transport import Transport
 import numpy as np
 
 class Collection:

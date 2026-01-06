@@ -81,10 +81,6 @@ class Vector(Base):
 
     vector_metadata: Mapped[Dict] =  mapped_column(JSON, nullable=True)
 
-    # vector_metadata: Mapped["VectorMetadata"] = relationship(
-    #     back_populates="vector", cascade="all, delete-orphan"
-    # )
-
     @property
     def numpy_vector(self) -> NDArray[NUMPY_DTYPE]:
         return np.frombuffer(self.vector_blob, dtype=NUMPY_DTYPE)
@@ -101,18 +97,6 @@ class Vector(Base):
     def vector(self, value: List[float]):
         self.numpy_vector = np.array(value)
 
-
-# class VectorMetadata(Base):
-#     __tablename__ = "vector_metadata"
-
-#     vector_id: Mapped[str] = mapped_column(
-#         ForeignKey("vectors.id", ondelete="CASCADE"), primary_key=True
-#     )
-
-#     source: Mapped[str] = mapped_column(String, nullable=False)
-#     content: Mapped[str] = mapped_column(Text, nullable=False)
-
-#     vector: Mapped["Vector"] = relationship(back_populates="vector_metadata")
 
 
 class Collection(Base):

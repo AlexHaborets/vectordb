@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 from pydantic import BaseModel
-from client.types import Metric
+from vectordb.types import Metric
 
 class Vector(BaseModel):
     id: str

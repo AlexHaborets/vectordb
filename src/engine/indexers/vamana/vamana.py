@@ -71,7 +71,9 @@ class VamanaIndexer:
             metric=self._metric,
         )
 
-    def _index_batch(self, batch_ids: np.ndarray, alpha: float) -> None:
+    def _index_batch(
+        self, batch_ids: np.ndarray, alpha: float, return_mod_ids: bool = False
+    ) -> List[int]:
         operations.forward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
@@ -83,15 +85,22 @@ class VamanaIndexer:
             metric=self._metric,
         )
 
-        operations.backward_indexing_pass(
+        backward_ids_np = operations.backward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
             R=self._R,
-            L=self._L_build,
             graph=self.graph.graph,
             vectors=self.vector_store.vectors,
             metric=self._metric,
         )
+
+        if return_mod_ids:
+            forward_ids = batch_ids.tolist()
+            backward_ids = backward_ids_np.tolist()
+            modified_ids = list(set(forward_ids + backward_ids))
+            return modified_ids
+        else:
+            return []
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
@@ -111,17 +120,18 @@ class VamanaIndexer:
 
         self._indexing_pass(alpha=1.2)
 
-    def update(self, vectors: List[VectorData] | List[int]) -> None:
+    def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
+        # Returns list of modified ids
         if not vectors:
-            return
-        
+            return [], False
+
         if isinstance(vectors[0], int):
             batch_ids = vectors
         else:
-            batch_ids = self.vector_store.upsert_batch(vectors) # type: ignore
+            batch_ids = self.vector_store.upsert_batch(vectors)  # type: ignore
 
             if batch_ids.size == 0:
-                return
+                return [], False
 
         curr_size = self.vector_store.size
 
@@ -131,10 +141,16 @@ class VamanaIndexer:
 
         if should_rebuild:
             self.index()
+
+            return [], True
         else:
             self.graph.resize(new_size=self.vector_store.size)
 
-            self._index_batch(batch_ids=np.array(batch_ids), alpha=1.2)
+            modified_ids = self._index_batch(
+                batch_ids=np.array(batch_ids), alpha=1.2, return_mod_ids=True
+            )
+
+            return modified_ids, False
 
     def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
         if self.entry_point is None:
@@ -156,7 +172,7 @@ class VamanaIndexer:
         if self._metric != MetricType.L2:
             scores = 1.0 - dists
         else:
-            scores = 1 / (1 + dists)
+            scores = 1 / (1 + dists) # type: ignore
 
         query_results = [
             (score, self.vector_store.get_dbid(idx))

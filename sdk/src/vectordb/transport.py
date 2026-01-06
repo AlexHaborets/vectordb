@@ -1,6 +1,6 @@
 import httpx
 
-from client.errors import handle_transport_errors
+from vectordb.errors import handle_transport_errors
 
 
 class Transport:

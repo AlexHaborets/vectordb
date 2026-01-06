@@ -1,29 +1,101 @@
-from typing import Dict
+from collections import defaultdict
+import copy
+from typing import Dict, List
+import threading
+
+from loguru import logger
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
-from src.db import UnitOfWork
+from src.db import UnitOfWork, session_manager
+from src.db.uow import DBUnitOfWork
 from src.engine import VamanaConfig, VamanaIndexer
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from src.schemas import VectorData
+from src.schemas import Vector, VectorData
 
 
 class IndexerManager:
     def __init__(self) -> None:
         self._indexers: Dict[str, VamanaIndexer] = {}
+        self._indexers_locks: Dict[str, threading.RLock] = {}
+        self._lock = threading.RLock()
+
+        self._save_queue = defaultdict(set)
+        self._save_queue_lock = threading.RLock()
+        self._background_worker = BackgroundScheduler()
+
+        self._background_worker.add_job(
+            func=self._persist_job,
+            trigger=IntervalTrigger(seconds=config.AUTO_SAVE_INDEX_PERIOD),
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+        self._background_worker.start()
+
+    def stop(self) -> None:
+        self._background_worker.shutdown()
+
+    def _persist_job(self) -> None:
+        save_queue_snapshot = {}
+        with self._save_queue_lock:
+            if not self._save_queue:
+                return
+
+            save_queue_snapshot = copy.deepcopy(self._save_queue)
+            self._save_queue.clear()
+
+        for collection_name, ids in save_queue_snapshot.items():
+            ids_list = list(ids)
+            try:
+                self._persist_index(collection_name, ids_list)
+            except Exception as e:
+                logger.error(f"Failed to persist index for {collection_name}: {e}")
+                self._enqueue_ids(collection_name, ids_list)
+
+    def _enqueue_ids(self, collection_name: str, ids: List[int]) -> None:
+        with self._save_queue_lock:
+            self._save_queue[collection_name].update(ids)
+
+    def _persist_index(self, collection_name: str, ids: List[int]) -> None:
+        subgraph = None
+
+        with self._indexers_locks[collection_name]:
+            indexer = self._indexers[collection_name]
+
+            subgraph = indexer.graph.get_subgraph(
+                ids=ids, idx_to_dbid=indexer.vector_store.idx_to_dbid
+            )
+
+        if subgraph:
+            uow = DBUnitOfWork(session_manager.get_session_factory())
+
+            with uow:
+                collection = uow.collections.get_collection_by_name(collection_name)
+
+                logger.info(f"Updating {collection_name} index in db...")
+                uow.vectors.update_graph(
+                    collection_id=collection.id,  # type: ignore
+                    subgraph=subgraph,
+                )
 
     def get_indexer(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
-        if collection_name in self._indexers:
-            return self._indexers[collection_name]
+        with self._lock:
+            if collection_name in self._indexers:
+                return self._indexers[collection_name]
 
-        indexer = self._load_from_db(collection_name, uow)
-        self._indexers[collection_name] = indexer
-        return indexer
+            indexer = self._load_from_db(collection_name, uow)
+            self._indexers[collection_name] = indexer
+            self._indexers_locks[collection_name] = threading.RLock()
+            return indexer
 
     def remove_indexer(self, collection_name: str) -> None:
-        if collection_name in self._indexers:
-            del self._indexers[collection_name]
+        with self._lock:
+            if collection_name in self._indexers:
+                del self._indexers[collection_name]
 
     def _load_from_db(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)
@@ -63,40 +135,74 @@ class IndexerManager:
             entry_point=entry_point,
         )
 
-        unindexed_vectors = uow.vectors.get_unindexed_vector_ids(collection_id=collection.id)
-        if unindexed_vectors:
+        unindexed_vectors = uow.vectors.get_unindexed_vector_ids(
+            collection_id=collection.id
+        )
+
+        # If there are vectors in db that are not in graph
+        # and indexer is not new
+        if unindexed_vectors and entry_point is not None:
+            logger.info(f"Repairing index for {collection_name}")
             indexer.update(unindexed_vectors)
 
         return indexer
 
-    def save_to_db(self, collection_name: str, uow: UnitOfWork) -> None:
+    def _save_to_db(self, collection_name: str, uow: UnitOfWork) -> None:
+        logger.info("Saving full index to db")
         if collection_name not in self._indexers:
             return
 
-        indexer = self._indexers[collection_name]
+        graph = None
+        entry_point = None
+        with self._lock:
+            indexer = self._indexers[collection_name]
+            graph = indexer.graph.to_db_graph(
+                idx_to_dbid=indexer.vector_store.idx_to_dbid
+            )
+            if indexer.entry_point is not None:
+                entry_point = indexer.vector_store.get_dbid(indexer.entry_point)
+
+        if not graph:
+            return
+
         collection = uow.collections.get_collection_by_name(collection_name)
+
         if not collection:
             raise CollectionNotFoundError(collection_name)
 
-        uow.vectors.save_graph(
-            collection_id=collection.id,
-            graph=indexer.graph.to_db_graph(
-                idx_to_dbid=indexer.vector_store.idx_to_dbid
-            ),
-        )
+        uow.vectors.save_graph(collection_id=collection.id, graph=graph)
 
-        if indexer.entry_point is not None:
-            db_entry_point = indexer.vector_store.get_dbid(indexer.entry_point)
-
+        if entry_point is not None:
             uow.collections.set_index_metadata(
                 collection_id=collection.id,
                 key="entry_point",
-                value=str(db_entry_point),
+                value=str(entry_point),
             )
 
+    def update(self, collection_name: str, vectors: List[Vector], uow: UnitOfWork):
+        indexer = self.get_indexer(collection_name, uow)
+        modified_ids: List[int]
+        full_rebuild: bool
+        with self._indexers_locks[collection_name]:
+            modified_ids, full_rebuild = indexer.update(
+                vectors=[VectorData.from_vector(v) for v in vectors]
+            )
+
+        if full_rebuild:
+            self._save_to_db(collection_name, uow)
+        else:
+            self._enqueue_ids(collection_name, modified_ids)
+
     def save_all(self, uow: UnitOfWork) -> None:
-        for collection_name in self._indexers.keys():
+        with self._lock:
+            collection_names = list(self._indexers.keys())
+
+        for collection_name in collection_names:
             collection = uow.collections.get_collection_by_name(collection_name)
+            if not collection:
+                continue
+
             collection_id = collection.id  # type: ignore
-            if uow.vectors.get_unindexed_vector_ids(collection_id):
-                self.save_to_db(collection_name, uow)
+            if ids := uow.vectors.get_unindexed_vector_ids(collection_id):
+                # TODO: Use collection id directly to avoid unnecessary lookup
+                self._persist_index(collection_name, ids)

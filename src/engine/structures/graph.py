@@ -96,3 +96,14 @@ class Graph:
             graph[node_db_id] = neighbor_db_ids
 
         return graph
+    
+    def get_subgraph(self, ids: List[int], idx_to_dbid: List[int]) -> Dict[int, List[int]]:
+        graph = {}
+
+        for i in ids:
+            row = self.graph[i]
+            node_db_id = idx_to_dbid[i]
+            neighbor_db_ids = [idx_to_dbid[n] for n in row if n != -1]
+            graph[node_db_id] = neighbor_db_ids
+
+        return graph
