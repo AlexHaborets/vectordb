@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 
 from sqlalchemy.dialects.sqlite import insert
-from sqlalchemy import func, select, update
+from sqlalchemy import except_, func, select, update
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
@@ -87,7 +87,7 @@ class VectorRepository:
         vectors_in_db = self.session.execute(stmt).scalars().all()
 
         self.session.commit()
-
+        
         return list(vectors_in_db)
 
     def mark_vector_deleted(self, collection_id: int, vector_id: str) -> bool:
@@ -115,8 +115,42 @@ class VectorRepository:
         for source, neighbor in edges:
             graph[source].append(neighbor)
         return graph
+    
+    def update_graph(self, collection_id: int, subgraph: Dict[int, List[int]]):
+        ids = subgraph.keys()
+        if not ids:
+            return
+        
+        self.session.execute(
+            models.graph_association_table.delete().where(
+                (models.graph_association_table.c.collection_id == collection_id) & 
+                (models.graph_association_table.c.source_id.in_(ids)) 
+            )
+        )
 
-    def save_graph(self, collection_id: int, graph: Dict[int, List[int]]) -> None:
+        self.session.flush()
+        
+        data = []
+        for src, neighbors in subgraph.items():
+            for neighbor in neighbors:
+                data.append(
+                    {
+                        "source_id": src,
+                        "neighbor_id": neighbor,
+                        "collection_id": collection_id,
+                    }
+                )
+
+        if data:
+            self.session.execute(models.graph_association_table.insert(), data)
+
+        self.session.commit()
+
+    def save_graph(
+        self,
+        collection_id: int,
+        graph: Dict[int, List[int]],
+    ) -> None:
         self.session.execute(
             models.graph_association_table.delete().where(
                 models.graph_association_table.c.collection_id == collection_id
@@ -145,32 +179,23 @@ class VectorRepository:
                 if len(batch) >= BATCH_SIZE:
                     self.session.execute(models.graph_association_table.insert(), batch)
                     batch = []
+
         if batch:
             self.session.execute(models.graph_association_table.insert(), batch)
 
         self.session.commit()
 
     def get_unindexed_vector_ids(self, collection_id: int) -> List[int]:
-        # Perform a left outer join to get the ids of vectors that are in collection
-        # but not in the graph
-        stmt = (
-            select(models.Vector.id)
-            .outerjoin(
-                target=models.graph_association_table,
-                onclause=(
-                    models.Vector.id == models.graph_association_table.c.source_id
-                )
-                & (
-                    models.Vector.collection_id
-                    == models.graph_association_table.c.collection_id
-                ),
-            )
-            .where(
-                models.Vector.collection_id == collection_id,
-                models.Vector.deleted == False,  # noqa: E712
-                models.graph_association_table.c.source_id == None,  # noqa: E711
-            )
+        all_vectors_stmt = select(models.Vector.id).where(
+            models.Vector.collection_id == collection_id,
+            models.Vector.deleted == False,  # noqa: E712
         )
+
+        indexed_vectors_stmt = select(models.graph_association_table.c.source_id).where(
+            models.graph_association_table.c.collection_id == collection_id
+        )
+
+        stmt = except_(all_vectors_stmt, indexed_vectors_stmt)
 
         result = self.session.execute(stmt)
         return list(result.scalars().all())

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine, event
+from sqlalchemy import NullPool, create_engine, event
 
 from src.common import config
 
@@ -22,7 +22,11 @@ class SessionManager:
             raise ValueError("SessionManager requires database url.")
         
         # check_same_thread is set to False for multithreading
-        self.engine = create_engine(url, connect_args={"check_same_thread": False})
+        self.engine = create_engine(
+            url, 
+            connect_args={"check_same_thread": False, "timeout": 30},
+            poolclass=NullPool
+        )
 
         event.listen(target=self.engine, identifier="connect", fn=configure_db)
 

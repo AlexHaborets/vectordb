@@ -4,7 +4,7 @@ from src.common import config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
 from src.engine.indexer_manager import IndexerManager
-from src.schemas import Query, SearchResult, Vector, VectorData
+from src.schemas import Query, SearchResult, Vector
 
 
 class IndexService:
@@ -47,5 +47,5 @@ class IndexService:
         indexer_manager: IndexerManager,
         uow: UnitOfWork,
     ) -> None:
-        indexer = indexer_manager.get_indexer(collection_name, uow)
-        indexer.update(vectors=[VectorData.from_vector(v) for v in vectors])
+        indexer_manager.update(collection_name, vectors, uow)
+        

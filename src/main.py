@@ -1,11 +1,10 @@
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from loguru import logger
 
 from src.api import collection_router, search_router, vector_router
-from src.api.dependencies import get_indexer_manager, get_scheduler
+from src.api.dependencies import get_indexer_manager
 from src.api.exception_handlers import create_exception_handler
 from src.common import (
     DuplicateEntityError,
@@ -13,49 +12,29 @@ from src.common import (
     InvalidOperationError,
     setup_logger,
 )
-from src.common.config import AUTO_SAVE_INDEX_PERIOD
-from src.db import session_manager
-from apscheduler.triggers.interval import IntervalTrigger
 
+from src.db import session_manager
 from src.db.uow import DBUnitOfWork
 
-
-def _save_indexers() -> None:
-    indexer_manager = get_indexer_manager()
-    uow = DBUnitOfWork(session_manager.get_session_factory())
-    with uow:
-        indexer_manager.save_all(uow)
-
-
-async def save_indexers() -> None:
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _save_indexers)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting vector db...")
     setup_logger()
 
-    scheduler = get_scheduler()
-    scheduler.add_job(
-        func=save_indexers,
-        id="auto_save_indexers",
-        trigger=IntervalTrigger(seconds=AUTO_SAVE_INDEX_PERIOD),
-        replace_existing=True,
-    )
-
-    scheduler.start()
-
     logger.info("Vector db started successfully")
 
     yield
+
     logger.info("Shutting down vector db...")
 
-    scheduler.shutdown(wait=False)
+    indexer_manager = get_indexer_manager()
+    uow = DBUnitOfWork(session_manager.get_session_factory())
+    with uow:
+        indexer_manager.save_all(uow)
+    indexer_manager.stop()
 
-    logger.info("Saving indexes to disk...")
-    await save_indexers()
-
+    logger.info("Closing database connections...")
     session_manager.close()
 
 

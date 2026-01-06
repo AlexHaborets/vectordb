@@ -318,13 +318,17 @@ def backward_indexing_pass(
     batch_ids: np.ndarray, 
     alpha: float,
     R: int,
-    L: int,
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
-) -> None:
+) -> np.ndarray:
+    """
+    Returns list of vector ids for which the graph was modified 
+    """
     batch_size = batch_ids.shape[0]
-
+    # Set of ids for which the graph was modified
+    modified_ids = np.zeros(vectors.shape[0], np.bool_)
+    
     for i in nb.prange(batch_size):
         query_id = batch_ids[i] 
 
@@ -368,6 +372,12 @@ def backward_indexing_pass(
                     vectors=vectors,
                     metric=metric
                 )
+                
             else:
                 # other_neighbors is a ref so we are modifying the graph itself
-                other_neighbors[empty_slot] = query_id     
+                other_neighbors[empty_slot] = query_id
+
+            # Add other to modified set
+            modified_ids[other] = True
+
+    return np.flatnonzero(modified_ids) 
