@@ -20,9 +20,11 @@ class CollectionService():
         return Collection.model_validate(collection)
     
     def delete_collection(self, collection_name: str, indexer_manager: IndexerManager, uow: UnitOfWork) -> None:
-        success = uow.collections.delete_collection(collection_name=collection_name)
-        if not success:
+        collection = uow.collections.get_collection_by_name(collection_name)
+        if not collection:
             raise CollectionNotFoundError(collection_name)
+        uow.collections.delete_collection(collection_id=collection.id)
+
         indexer_manager.remove_indexer(collection_name)
     
     def get_all_collections(self, uow: UnitOfWork) -> List[Collection]:

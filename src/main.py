@@ -15,18 +15,18 @@ from src.common import (
 
 from src.db import session_manager
 from src.db.uow import DBUnitOfWork
-
+from src.common.config import DB_PORT
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting vector db...")
+    logger.info("Starting VectorDB...")
     setup_logger()
 
-    logger.info("Vector db started successfully")
+    logger.info("VectorDB started successfully")
 
     yield
 
-    logger.info("Shutting down vector db...")
+    logger.info("Shutting down VectorDB...")
 
     indexer_manager = get_indexer_manager()
     uow = DBUnitOfWork(session_manager.get_session_factory())
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     session_manager.close()
 
 
-app = FastAPI(title="Simple VectorDB", lifespan=lifespan)
+app = FastAPI(title="VectorDB", lifespan=lifespan)
 
 app.include_router(vector_router)
 app.include_router(search_router)
@@ -59,10 +59,10 @@ app.add_exception_handler(
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"message": "Vector DB is running"}
+    return {"message": "VectorDB is running"}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app=app, host="0.0.0.0", port=8000)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=DB_PORT, reload=True)

@@ -85,8 +85,6 @@ class VectorRepository:
         stmt = stmt.returning(models.Vector)
 
         vectors_in_db = self.session.execute(stmt).scalars().all()
-
-        self.session.commit()
         
         return list(vectors_in_db)
 
@@ -100,7 +98,6 @@ class VectorRepository:
             )
             .values(deleted=True)
         )
-        self.session.commit()
         return result.rowcount > 0
 
     def get_graph(self, collection_id: int) -> Dict[int, List[int]]:
@@ -127,8 +124,6 @@ class VectorRepository:
                 (models.graph_association_table.c.source_id.in_(ids)) 
             )
         )
-
-        self.session.flush()
         
         data = []
         for src, neighbors in subgraph.items():
@@ -144,8 +139,6 @@ class VectorRepository:
         if data:
             self.session.execute(models.graph_association_table.insert(), data)
 
-        self.session.commit()
-
     def save_graph(
         self,
         collection_id: int,
@@ -156,10 +149,8 @@ class VectorRepository:
                 models.graph_association_table.c.collection_id == collection_id
             )
         )
-        self.session.flush()
 
         if not graph:
-            self.session.commit()
             return
 
         BATCH_SIZE = 4096
@@ -182,8 +173,6 @@ class VectorRepository:
 
         if batch:
             self.session.execute(models.graph_association_table.insert(), batch)
-
-        self.session.commit()
 
     def get_unindexed_vector_ids(self, collection_id: int) -> List[int]:
         all_vectors_stmt = select(models.Vector.id).where(

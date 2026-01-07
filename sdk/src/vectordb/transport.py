@@ -12,7 +12,14 @@ class Transport:
     def request(self, method: str, path: str, **kwargs):
         response = self.client.request(method=method, url=path, **kwargs)
         response.raise_for_status()
-        return response.json()
+            
+        if response.status_code == 204:
+            return None
+        
+        if response.content:
+            return response.json()
+        
+        return None
     
     def get(self, path: str, **kwargs): 
         return self.request("GET", path, **kwargs)
