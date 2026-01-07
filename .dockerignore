@@ -9,7 +9,8 @@ Dockerfile
 
 # Directories
 __pycache__
-client
+sdk/
+examples/
 .venv
 .vscode
 .git

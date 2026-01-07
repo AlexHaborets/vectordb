@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from sqlalchemy import delete, text
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
@@ -33,23 +34,37 @@ class CollectionRepository:
             metric=collection.metric,
         )
         self.session.add(new_collection)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(new_collection)
         return new_collection
 
-    def delete_collection(self, collection_name: str) -> bool:
-        collection = self.get_collection_by_name(collection_name)
-        if not collection:
-            return False
-        self.session.delete(collection)
-        self.session.commit()
-        return True
+    def delete_collection(self, collection_id: int) -> None:
+        self.session.execute(text("PRAGMA foreign_keys = OFF"))
+
+        self.session.execute(
+            delete(models.graph_association_table).where(
+                models.graph_association_table.c.collection_id == collection_id
+            )
+        )
+
+        self.session.execute(
+            delete(models.Vector).where(models.Vector.collection_id == collection_id)
+        )
+
+        self.session.execute(
+            delete(models.IndexMetadata).where(
+                models.IndexMetadata.collection_id == collection_id
+            )
+        )
+
+        self.session.execute(
+            delete(models.Collection).where(models.Collection.id == collection_id)
+        )
 
     def set_index_metadata(self, collection_id: int, key: str, value: str) -> None:
         self.session.merge(
             models.IndexMetadata(collection_id=collection_id, key=key, value=value)
         )
-        self.session.commit()
 
     def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
         metadata = self.session.get(models.IndexMetadata, (collection_id, key))

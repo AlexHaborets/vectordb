@@ -1,6 +1,7 @@
 alembic==1.16.5
 annotated-types==0.7.0
 anyio==4.11.0
+APScheduler==3.11.2
 certifi==2025.8.3
 click==8.3.0
 dnspython==2.8.0
@@ -44,6 +45,7 @@ threadpoolctl==3.6.0
 typer==0.19.2
 typing-inspection==0.4.1
 typing_extensions==4.15.0
+tzlocal==5.3.1
 urllib3==2.5.0
 uvicorn==0.37.0
 uvloop==0.21.0

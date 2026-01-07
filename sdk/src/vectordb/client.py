@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Self
 from vectordb.models import Collection as CollectionModel
 from vectordb.collection import Collection
 from vectordb.errors import NotFoundError
@@ -11,10 +11,10 @@ class Client:
     def __init__(self, url: str = DEFAULT_DB_URL) -> None:
         self._transport = Transport(base_url=url)
 
-    def __enter__(self):
-        pass
+    def __enter__(self) -> Self:
+        return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
         self._transport.close()
 
     def create_collection(self, name: str, dimension: int, metric: Metric) -> Collection:
@@ -40,6 +40,8 @@ class Client:
 
     def list_collections(self) -> List[str]:
         data = self._transport.get("/collections")
+        if not data:
+            return []
         return [item["name"] for item in data]
 
     def delete_collection(self, name: str) -> None:
