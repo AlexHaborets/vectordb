@@ -4,6 +4,7 @@ import abc
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.db.repos.collection import CollectionRepository
+from src.db.repos.index import IndexRepository
 from src.db.repos.vector import VectorRepository
 
 
@@ -11,6 +12,7 @@ class UnitOfWork(abc.ABC):
     # Unit of work interface
     collections: CollectionRepository
     vectors: VectorRepository
+    indexes: IndexRepository
 
     def __enter__(self) -> UnitOfWork:
         return self
@@ -35,6 +37,7 @@ class DBUnitOfWork(UnitOfWork):
         self.session: Session = self.session_factory()
         self.collections = CollectionRepository(self.session)
         self.vectors = VectorRepository(self.session)
+        self.indexes = IndexRepository(self.session)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, traceback) -> None:
