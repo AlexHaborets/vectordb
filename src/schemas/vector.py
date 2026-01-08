@@ -1,20 +1,34 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List
 
 import numpy as np
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from src.common.config import BATCH_SIZE_LIMIT, NUMPY_DTYPE
+from src.common.config import (
+    BATCH_SIZE_LIMIT,
+    NUMPY_DTYPE,
+    MAX_ID_LENGTH,
+    MAX_META_SIZE,
+)
+
 
 class VectorBase(BaseModel):
     pass
 
 
 class VectorCreate(VectorBase):
-    id: str
-    vector: List[float]
-    metadata: Dict[str, Any] | None = None 
+    id: str = Field(
+        min_length=1,
+        max_length=MAX_ID_LENGTH,
+        pattern=r"^[a-zA-Z0-9_\-]+$",  # URL-safe
+        description="Unique identifier for the vector",
+    )
+
+    vector: List[float] = Field(min_length=1)
+
+    metadata: Dict[str, Any] | None = Field(default=None, max_length=MAX_META_SIZE)
 
 
 class Vector(VectorBase):
@@ -22,13 +36,19 @@ class Vector(VectorBase):
     internal_id: int = Field(validation_alias="id", exclude=True)
 
     vector: List[float]
-    metadata: Dict[str, Any] | None = Field(validation_alias="vector_metadata", default=None)
+    metadata: Dict[str, Any] | None = Field(
+        validation_alias="vector_metadata", default=None
+    )
 
     @field_validator("vector", mode="before")
     @classmethod
     def vector_to_list(cls, v: Any) -> List[float]:
         if isinstance(v, np.ndarray):
             return v.tolist()
+
+        if not all(math.isfinite(x) for x in v):
+            raise ValueError("Vector contains NaN or Inf values")
+
         return v
 
     @property
@@ -58,3 +78,10 @@ class VectorData(VectorBase):
 
 class UpsertBatch(BaseModel):
     vectors: List[VectorCreate] = Field(min_length=1, max_length=BATCH_SIZE_LIMIT)
+
+    @model_validator(mode="after")
+    def check_batch_integrity(self) -> "UpsertBatch":
+        ids = [v.id for v in self.vectors]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Batch contains duplicate ids")
+        return self

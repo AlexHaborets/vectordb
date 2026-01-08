@@ -9,11 +9,11 @@ It is designed for educational purposes and lightweight use cases, including sem
 
 > ⚠️ **Note:** This project is a **work in progress**. Some features are incomplete and are subject to change.
 
--   **Vamana Graph Indexing:** Efficient approximate nearest neighbor (ANN) search using the Vamana algorithm, optimized with [Numba](https://numba.pydata.org/).  
--   **Persistence:** Robust and portable data storage using SQLite, managed via [SQLAlchemy](https://www.sqlalchemy.org/) and [Alembic](https://alembic.sqlalchemy.org/en/latest/).
--   **Collection Management:** Supports creating and managing distinct collections of vectors.
--   **RESTful API:** Fully interactive API built with [FastAPI](https://fastapi.tiangolo.com/).
--   **Python SDK:** Includes a light Python client with automatic batching and NumPy support.
+- **🧭 Vamana Graph Indexing:** Implements the algorithm behind [DiskANN](https://proceedings.neurips.cc/paper/2019/file/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Paper.pdf). Vamana optimizes the graph with **long-range shortcuts**, allowing the search to navigate huge datasets efficiently by jumping quickly toward the target rather than stepping slowly between neighbors.
+- **⚡ Pure Python, C-Level Speed:** By leveraging **[Numba](https://numba.pydata.org/)** JIT compilation, this project achieves indexing and search performance comparable to C while maintaining a readable, hackable Python codebase.
+- **💾 ACID-Compliant Persistence:** Data isn't just dumped into binary files. Metadata and vectors are stored reliably in **SQLite**, orchestrated by **[SQLAlchemy](https://www.sqlalchemy.org/)** and **[Alembic](https://alembic.sqlalchemy.org/en/latest/)**, ensuring portability and crash-safety.
+- **🐍 Data Science Ready SDK:** A lightweight client designed for the Python ecosystem. It supports NumPy arrays natively and handles automatic request batching behind the scenes to maximize throughput.
+- **🔌 Modern REST API:** Powered by **[FastAPI](https://fastapi.tiangolo.com/)**, providing asynchronous request handling, rigorous type safety, and automatic interactive documentation (Swagger UI).
 
 ## 🚀 Getting Started
 

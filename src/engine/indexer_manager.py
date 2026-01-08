@@ -77,7 +77,7 @@ class IndexerManager:
                 collection = uow.collections.get_collection_by_name(collection_name)
 
                 logger.info(f"Updating {collection_name} index in db...")
-                uow.vectors.update_graph(
+                uow.indexes.update_graph(
                     collection_id=collection.id,  # type: ignore
                     subgraph=subgraph,
                 )
@@ -114,14 +114,14 @@ class IndexerManager:
         vectors = [VectorData.model_validate(v) for v in vectors_in_db]
         vector_store = VectorStore(dims=collection.dimension, vectors=vectors)
 
-        entry_point_in_db = uow.collections.get_index_metadata(
+        entry_point_in_db = uow.indexes.get_index_metadata(
             collection_id=collection.id, key="entry_point"
         )
         entry_point = (
             vector_store.get_idx(int(entry_point_in_db)) if entry_point_in_db else None
         )
 
-        graph_in_db = uow.vectors.get_graph(collection_id=collection.id)
+        graph_in_db = uow.indexes.get_graph(collection_id=collection.id)
         graph = Graph.from_db(
             db_graph=graph_in_db,
             degree=vamana_config.R,
@@ -135,7 +135,7 @@ class IndexerManager:
             entry_point=entry_point,
         )
 
-        unindexed_vectors = uow.vectors.get_unindexed_vector_ids(
+        unindexed_vectors = uow.indexes.get_unindexed_vector_ids(
             collection_id=collection.id
         )
 
@@ -170,10 +170,10 @@ class IndexerManager:
         if not collection:
             raise CollectionNotFoundError(collection_name)
 
-        uow.vectors.save_graph(collection_id=collection.id, graph=graph)
+        uow.indexes.save_graph(collection_id=collection.id, graph=graph)
 
         if entry_point is not None:
-            uow.collections.set_index_metadata(
+            uow.indexes.set_index_metadata(
                 collection_id=collection.id,
                 key="entry_point",
                 value=str(entry_point),
@@ -203,6 +203,6 @@ class IndexerManager:
                 continue
 
             collection_id = collection.id  # type: ignore
-            if ids := uow.vectors.get_unindexed_vector_ids(collection_id):
+            if ids := uow.indexes.get_unindexed_vector_ids(collection_id):
                 # TODO: Use collection id directly to avoid unnecessary lookup
                 self._persist_index(collection_name, ids)
