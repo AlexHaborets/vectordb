@@ -51,4 +51,8 @@ with Client("http://localhost:8000") as client:
 
 ## 📂 Examples
 
-Check the [examples](../examples/) folder in the root of the repository for detailed usage.
+Check the [examples](../examples/) folder in the root of the repository for detailed usage:
+
+- [Tutorial Notebook](../examples/tutorial.ipynb): Interactive guide using Pandas and HuggingFace models.
+
+- [Large Dataset Benchmark](../examples/rag.ipynb): A stress test loading 50,000+ DBpedia articles for RAG.
