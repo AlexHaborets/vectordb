@@ -11,7 +11,7 @@ It is designed for educational purposes and lightweight use cases, including sem
 
 - **🧭 Vamana Graph Indexing:** Implements the algorithm behind [DiskANN](https://proceedings.neurips.cc/paper/2019/file/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Paper.pdf). Vamana optimizes the graph with **long-range shortcuts**, allowing the search to navigate huge datasets efficiently by jumping quickly toward the target rather than stepping slowly between neighbors.
 - **⚡ Pure Python, C-Level Speed:** By leveraging **[Numba](https://numba.pydata.org/)** JIT compilation, this project achieves indexing and search performance comparable to C while maintaining a readable, hackable Python codebase.
-- **💾 ACID-Compliant Persistence:** Data isn't just dumped into binary files. Metadata and vectors are stored reliably in **SQLite**, orchestrated by **[SQLAlchemy](https://www.sqlalchemy.org/)** and **[Alembic](https://alembic.sqlalchemy.org/en/latest/)**, ensuring portability and crash-safety.
+- **💾 Persistence:** Data isn't just dumped into binary files. Metadata and vectors are stored reliably in **SQLite**, orchestrated by **[SQLAlchemy](https://www.sqlalchemy.org/)** and **[Alembic](https://alembic.sqlalchemy.org/en/latest/)**, ensuring portability and crash-safety.
 - **🐍 Data Science Ready SDK:** A lightweight client designed for the Python ecosystem. It supports NumPy arrays natively and handles automatic request batching behind the scenes to maximize throughput.
 - **🔌 Modern REST API:** Powered by **[FastAPI](https://fastapi.tiangolo.com/)**, providing asynchronous request handling, rigorous type safety, and automatic interactive documentation (Swagger UI).
 
