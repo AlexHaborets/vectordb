@@ -6,6 +6,7 @@ import threading
 from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy.exc import IntegrityError
 
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
@@ -63,7 +64,18 @@ class IndexerManager:
     def _persist_index(self, collection_name: str, ids: List[int]) -> None:
         subgraph = None
 
-        with self._indexers_locks[collection_name]:
+        indexer_lock = None
+        with self._lock:
+            if collection_name in self._indexers_locks:
+                indexer_lock = self._indexers_locks[collection_name]
+
+        if not indexer_lock:
+            return
+
+        with indexer_lock:
+            if collection_name not in self._indexers:
+                return
+            
             indexer = self._indexers[collection_name]
 
             subgraph = indexer.graph.get_subgraph(
@@ -71,31 +83,51 @@ class IndexerManager:
             )
 
         if subgraph:
-            uow = DBUnitOfWork(session_manager.get_session_factory())
+            try:
+                uow = DBUnitOfWork(session_manager.get_session_factory())
+                
+                with uow:
+                    collection = uow.collections.get_collection_by_name(collection_name)
 
-            with uow:
-                collection = uow.collections.get_collection_by_name(collection_name)
-
-                logger.info(f"Updating {collection_name} index in db...")
-                uow.indexes.update_graph(
-                    collection_id=collection.id,  # type: ignore
-                    subgraph=subgraph,
-                )
-
+                    logger.info(f"Updating {collection_name} index in db...")
+                    uow.indexes.update_graph(
+                        collection_id=collection.id,  # type: ignore
+                        subgraph=subgraph,
+                    )
+            except IntegrityError:
+                return
+            
     def get_indexer(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         with self._lock:
             if collection_name in self._indexers:
                 return self._indexers[collection_name]
 
+            if collection_name not in self._indexers_locks:
+                self._indexers_locks[collection_name] = threading.RLock()
+
             indexer = self._load_from_db(collection_name, uow)
             self._indexers[collection_name] = indexer
-            self._indexers_locks[collection_name] = threading.RLock()
+
             return indexer
 
     def remove_indexer(self, collection_name: str) -> None:
         with self._lock:
-            if collection_name in self._indexers:
-                del self._indexers[collection_name]
+            if collection_name in self._indexers_locks:
+                indexer_lock = self._indexers_locks[collection_name]
+
+                # Prevent using the indexer while its being deleted
+                with indexer_lock:
+                    if collection_name in self._indexers:
+                        del self._indexers[collection_name]
+
+                # Delete the indexer lock
+                del self._indexers_locks[collection_name]
+
+        # Clean the queue
+        with self._save_queue_lock:
+            if collection_name in self._save_queue:
+                del self._save_queue[collection_name]
+
 
     def _load_from_db(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)
