@@ -42,6 +42,8 @@ numpy==2.3.5
     #   numba
     #   scikit-learn
     #   scipy
+orjson==3.11.5
+    # via vectordb-server (pyproject.toml)
 pydantic==2.11.9
     # via fastapi
 pydantic-core==2.33.2
@@ -80,8 +82,10 @@ tzlocal==5.3.1
     # via apscheduler
 uvicorn==0.40.0
     # via vectordb-server (pyproject.toml)
-uvloop==0.21.0
-    # via uvicorn
+uvloop==0.22.1
+    # via
+    #   vectordb-server (pyproject.toml)
+    #   uvicorn
 watchfiles==1.1.0
     # via uvicorn
 websockets==15.0.1

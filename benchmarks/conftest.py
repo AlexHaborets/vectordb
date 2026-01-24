@@ -9,8 +9,6 @@ import pytest
 from vectordb import Client, Collection
 
 BASE_URL = "http://localhost:8000"
-COLLECTION_NAME = "benchmark"
-
 
 @pytest.fixture(scope="session", autouse=True)
 def server() -> Generator[None, Any, None]:
@@ -49,16 +47,22 @@ def client() -> Generator[Client, Any, None]:
 
 
 @pytest.fixture(scope="function")
-def collection(client: Client) -> Generator[Collection, Any, None]:
+def collection(client: Client, request) -> Generator[Collection, Any, None]:
     name = "benchmark"
     dim = 384
+    distance = "l2"
+
+    if hasattr(request, "param"):
+        dim = request.param.get("dim", dim)
+        name = request.param.get("name", name)
+        distance = request.param.get("distance", distance)
 
     try:
         client.delete_collection(name)
     except:  # noqa: E722
         pass
 
-    collection = client.create_collection(name, dim, "l2")
+    collection = client.create_collection(name, dim, distance)
 
     yield collection
 

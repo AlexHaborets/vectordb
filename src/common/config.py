@@ -1,5 +1,17 @@
+import os
 from pathlib import Path
+import numba
 import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
+
+NUMBA_THREADING_LAYER = os.getenv("NUMBA_THREADING_LAYER", "tbb")
+
+try:
+    numba.config.THREADING_LAYER = NUMBA_THREADING_LAYER # type: ignore
+except ImportError:
+    pass
 
 """
 DB settings
