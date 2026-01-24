@@ -3,7 +3,7 @@
 .PHONY: install dev test benchmark clean
 
 install:
-	uv sync
+	uv sync --all-extras
 	uv add --dev --editable ./sdk
 
 dev:
@@ -13,12 +13,11 @@ test:
 	uv run pytest tests/
 
 benchmark:
-	uv run pytest benchmarks/ -s
+	uv run pytest benchmarks/ -s 
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	rm -rf .venv
 
 lock:
 	uv pip compile pyproject.toml -o requirements.txt

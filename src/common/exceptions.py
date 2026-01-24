@@ -36,3 +36,4 @@ class WrongVectorDimensionsError(InvalidOperationError):
             f"Wrong vector dimension ({actual_dims}) for index with dimension {expected_dims}."
         )
 
+

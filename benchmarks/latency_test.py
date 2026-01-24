@@ -5,13 +5,14 @@ import numpy as np
 MIN_WRITE_SPEED = 700.0   # vectors per second
 MAX_READ_LATENCY = 15.0   # milliseconds
 
+N_VECTORS = 10000
+DIMS = 384
+BATCH_SIZE = 512
+
 def test_write_speed(collection):
     """
     Benchmarks vector upsert speed
     """
-    N_VECTORS = 10000
-    DIMS = 384
-    BATCH_SIZE = 128
 
     print(f"\n[Write] Generating {N_VECTORS} vectors...")
     vectors = np.random.rand(N_VECTORS, DIMS).astype("float32")
@@ -36,9 +37,6 @@ def test_read_latency(collection):
     """
     Benchmarks search latency
     """
-    N_VECTORS = 10000
-    DIMS = 384
-    BATCH_SIZE = 128
 
     print(f"\n[Read] Upserting {N_VECTORS} vectors to DB...")
     

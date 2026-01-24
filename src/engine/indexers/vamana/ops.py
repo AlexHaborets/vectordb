@@ -3,7 +3,6 @@ import numpy as np
 
 from src.common.config import NUMPY_DTYPE
 
-
 @nb.njit(fastmath=True, inline="always", cache=True)
 def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
@@ -65,6 +64,7 @@ def compute_dists_batch(
 def insort(
     ids: np.ndarray,
     dists: np.ndarray,
+    checked: np.ndarray,
     new_id: int,
     new_dist: float,
     curr_size: int,
@@ -87,14 +87,17 @@ def insort(
         for i in range(end, insert_ptr, -1):
             ids[i] = ids[i - 1]
             dists[i] = dists[i - 1]
+            checked[i] = checked[i - 1]
 
     if insert_ptr < max_size:
         ids[insert_ptr] = new_id
         dists[insert_ptr] = new_dist
+        checked[insert_ptr] = False 
         if curr_size < max_size:
             return curr_size + 1
 
     return curr_size
+
 
 
 @nb.njit(fastmath=True, cache=True)
@@ -129,32 +132,38 @@ def greedy_search(
     # create a candidate priority queue with two ndarrays
     candidates_dists = np.full(shape=L, fill_value=np.inf, dtype=NUMPY_DTYPE)
     candidates_ids = np.full(shape=L, fill_value=-1, dtype=np.int32)
+    candidates_checked = np.zeros(shape=L, dtype=np.bool_)
 
     # add entry to the candidates
     candidates_dists[0] = query_entry_dist
     candidates_ids[0] = entry_id
-    # number of candidates in the queue
     candidate_count = 1
 
     # mark entry as seen
     seen[entry_id] = True
-
-    visited = np.empty(L*2, dtype=np.int32)
+    
+    # visited set
+    visited = np.empty(L * 2, dtype=np.int32)
     visited_count = 0
 
-    # pointer to the candidate we haven't visited yet (currently entry point)
-    # also represents the number of nodes we have processed
-    candidate_ptr = 0
+    while True:
+        candidate_ptr: int = -1
 
-    # candidate_ptr < candidate_count means
-    # there are still candidates to visit
-    while candidate_ptr < candidate_count:
-        if candidate_ptr >= L:
+        for i in range(candidate_count):
+            if not candidates_checked[i]:
+                candidate_ptr = i
+                break
+        
+        if candidate_ptr == -1:
             break
-
+        
+        # optimization
+        if candidate_count == L and candidates_dists[candidate_ptr] > candidates_dists[L-1]:
+             break
+        
         # pop a node from the candidate queue
         pstar_id = candidates_ids[candidate_ptr]
-        candidate_ptr += 1
+        candidates_checked[candidate_ptr] = True
 
         visited[visited_count] = pstar_id
         visited_count += 1
@@ -164,6 +173,7 @@ def greedy_search(
         for n_id in neighbors:
             if n_id == -1:
                 break
+
             if not seen[n_id]:
                 seen[n_id] = True
 
@@ -172,16 +182,12 @@ def greedy_search(
                 candidate_count = insort(
                     ids=candidates_ids,
                     dists=candidates_dists,
+                    checked=candidates_checked,
                     new_id=n_id,
                     new_dist=dist,
                     curr_size=candidate_count,
                     max_size=L,
                 )
-
-    # Reset the visited mask
-    for i in range(visited_count):
-        visited_id = visited[i]
-        seen[visited_id] = False
 
     return candidates_ids[:k], candidates_dists[:k], visited[:visited_count]
 
@@ -263,7 +269,6 @@ def robust_prune(
         if keep:
             neighbors[neighbor_count] = pstar_id
             neighbor_count += 1
-    
 
     # We can neglect the race conditions that will happen
     # as they degrade the graph quality only by a small margin
@@ -273,7 +278,7 @@ def robust_prune(
 
 @nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
 def forward_indexing_pass(
-    batch_ids: np.ndarray, 
+    batch_ids: np.ndarray,
     alpha: float,
     R: int,
     L: int,
@@ -281,7 +286,7 @@ def forward_indexing_pass(
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
-) -> None: 
+) -> None:
     """
     Exploring the neighbors of the batch nodes
     """
@@ -300,22 +305,23 @@ def forward_indexing_pass(
             seen=seen,
             graph=graph,
             vectors=vectors,
-            metric=metric
+            metric=metric,
         )
 
         robust_prune(
-            source_id=query_id, 
-            candidates_ids=V, 
+            source_id=query_id,
+            candidates_ids=V,
             alpha=alpha,
             R=R,
             graph=graph,
             vectors=vectors,
-            metric=metric
+            metric=metric,
         )
+
 
 @nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
 def backward_indexing_pass(
-    batch_ids: np.ndarray, 
+    batch_ids: np.ndarray,
     alpha: float,
     R: int,
     graph: np.ndarray,
@@ -323,14 +329,14 @@ def backward_indexing_pass(
     metric: int,
 ) -> np.ndarray:
     """
-    Returns list of vector ids for which the graph was modified 
+    Returns list of vector ids for which the graph was modified
     """
     batch_size = batch_ids.shape[0]
     # Set of ids for which the graph was modified
     modified_ids = np.zeros(vectors.shape[0], np.bool_)
-    
+
     for i in nb.prange(batch_size):
-        query_id = batch_ids[i] 
+        query_id = batch_ids[i]
 
         query_neighbors = graph[query_id]
 
@@ -338,41 +344,41 @@ def backward_indexing_pass(
             # Stop if we reached the neighbor padding
             if other == -1:
                 break
-            
+
             other_neighbors = graph[other]
-            
+
             duplicate = False
             empty_slot = -1
 
             for j in range(R):
                 neighbor_id = other_neighbors[j]
                 if neighbor_id == query_id:
-                    duplicate = True 
+                    duplicate = True
                     break
 
                 # Add i to neighbors
                 if neighbor_id == -1:
                     empty_slot = j
                     break
-            
+
             if duplicate:
                 continue
-            
+
             # Means there are now more than R neighbors (no space left)
             if empty_slot == -1:
                 robust_prune(
-                    source_id=other, 
+                    source_id=other,
                     # In the algorithm the candidates is other_neighbors + i
-                    # But robust prune already adds the neighbors so we can 
+                    # But robust prune already adds the neighbors so we can
                     # just pass i by itself
-                    candidates_ids=np.array([query_id], dtype=np.int32),   
-                    alpha=alpha, 
+                    candidates_ids=np.array([query_id], dtype=np.int32),
+                    alpha=alpha,
                     R=R,
                     graph=graph,
                     vectors=vectors,
-                    metric=metric
+                    metric=metric,
                 )
-                
+
             else:
                 # other_neighbors is a ref so we are modifying the graph itself
                 other_neighbors[empty_slot] = query_id
@@ -380,4 +386,4 @@ def backward_indexing_pass(
             # Add other to modified set
             modified_ids[other] = True
 
-    return np.flatnonzero(modified_ids) 
+    return np.flatnonzero(modified_ids)
