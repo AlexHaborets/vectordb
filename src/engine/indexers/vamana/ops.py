@@ -109,6 +109,20 @@ def count_neighbors(neighbors_array: np.ndarray) -> int:
         count += 1
     return count
 
+# Bitset operations
+# in binary // 2^k is eq to >> k
+# so x // 8 (which is x // 2^3):
+# x // 8 is eq to x >> 3 
+
+# x % 8 is eq to x & 7 
+@nb.njit(fastmath=True, inline="always")
+def set_bit(bitset: np.ndarray, index: int) -> None:
+    bitset[index >> 3] |= (1 << (index & 7))
+
+@nb.njit(fastmath=True, inline="always")
+def get_bit(bitset: np.ndarray, index: int) -> bool:
+    return (bitset[index >> 3] >> (index & 7)) & 1
+
 
 @nb.njit(fastmath=True, cache=True)
 def greedy_search(
@@ -116,11 +130,11 @@ def greedy_search(
     query_vector: np.ndarray,
     k: int,
     L: int,
-    seen: np.ndarray,
+    seen: np.ndarray, # bitset 
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """
     Data: Graph G with start node s, query xq, result
         size k, search list size L ≥ k
@@ -138,12 +152,12 @@ def greedy_search(
     candidates_dists[0] = query_entry_dist
     candidates_ids[0] = entry_id
     candidate_count = 1
-
-    # mark entry as seen
-    seen[entry_id] = True
     
+    # mark entry as seen
+    set_bit(seen, entry_id)
+
     # visited set
-    visited = np.empty(L * 2, dtype=np.int32)
+    visited = np.empty(L*4, dtype=np.int32)
     visited_count = 0
 
     while True:
@@ -165,8 +179,10 @@ def greedy_search(
         pstar_id = candidates_ids[candidate_ptr]
         candidates_checked[candidate_ptr] = True
 
-        visited[visited_count] = pstar_id
-        visited_count += 1
+        # avoid a buffer overflow for safety
+        if visited_count < visited.shape[0]:
+            visited[visited_count] = pstar_id
+            visited_count += 1
 
         neighbors = graph[pstar_id]
 
@@ -174,8 +190,8 @@ def greedy_search(
             if n_id == -1:
                 break
 
-            if not seen[n_id]:
-                seen[n_id] = True
+            if not get_bit(seen, n_id): 
+                set_bit(seen, n_id)
 
                 dist = compute_dist(a=vectors[n_id], b=query_vector, metric=metric)
 
@@ -189,7 +205,7 @@ def greedy_search(
                     max_size=L,
                 )
 
-    return candidates_ids[:k], candidates_dists[:k], visited[:visited_count]
+    return candidates_ids[:k], candidates_dists[:k], visited, visited_count
 
 
 @nb.njit(fastmath=True, cache=True)
@@ -224,7 +240,7 @@ def robust_prune(
 
     candidate_count = candidates.shape[0]
     if candidate_count == 0:
-        return
+        return 
 
     source_vector = vectors[source_id]
     candidate_source_dists = compute_dists_batch(
@@ -270,11 +286,7 @@ def robust_prune(
             neighbors[neighbor_count] = pstar_id
             neighbor_count += 1
 
-    # We can neglect the race conditions that will happen
-    # as they degrade the graph quality only by a small margin
-    # and the speed up is worth it
-    graph[source_id] = neighbors
-
+    graph[source_id] = neighbors 
 
 @nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
 def forward_indexing_pass(
@@ -292,12 +304,20 @@ def forward_indexing_pass(
     """
 
     batch_size = batch_ids.shape[0]
+    vector_count = vectors.shape[0]
+    visited_map = np.empty(shape=(batch_size, L*4), dtype=np.int32)
+    visited_counts = np.zeros_like(batch_ids, dtype=np.int32)
+                  
+                  # (x + y - 1) // y
+                  # (x + 8 - 1) // 8
+    bitset_size = (vector_count + 7) // 8
 
     for i in nb.prange(batch_size):
-        seen = np.zeros(vectors.shape[0], dtype=np.bool_)
         query_id = batch_ids[i]
         query_vector = vectors[query_id]
-        _, _, V = greedy_search(
+
+        seen = np.zeros(bitset_size, dtype=np.uint8)
+        _, _, visited, count = greedy_search(
             entry_id=entry_point,
             query_vector=query_vector,
             k=1,
@@ -306,11 +326,18 @@ def forward_indexing_pass(
             graph=graph,
             vectors=vectors,
             metric=metric,
-        )
+        )   
 
+        visited_counts[i] = count
+        visited_map[i, :count] = visited[:count]
+    
+    for i in range(batch_size): 
+        query_id = batch_ids[i]
+        count = visited_counts[i]
+        candidate_ids = visited_map[i, :count]
         robust_prune(
             source_id=query_id,
-            candidates_ids=V,
+            candidates_ids=candidate_ids,
             alpha=alpha,
             R=R,
             graph=graph,

@@ -1,7 +1,8 @@
 import os
+import contextlib
+from typing import Literal
 import requests
 import h5py
-import numpy as np
 
 DATASETS = {
     "siftsmall": "siftsmall-128-euclidean.hdf5",
@@ -28,7 +29,8 @@ def download_file(filename):
             os.remove(filename) 
         raise e
 
-def load_dataset(name="siftsmall"):
+@contextlib.contextmanager
+def load_dataset(name: Literal["siftsmall", "sift", "glove"]):
     if name not in DATASETS:
         raise ValueError(f"Unknown dataset: {name}. Options: {list(DATASETS.keys())}")
     
@@ -36,8 +38,4 @@ def load_dataset(name="siftsmall"):
     download_file(filename)
     
     with h5py.File(filename, 'r') as f:
-        train = np.array(f['train'])
-        test = np.array(f['test'])
-        neighbors = np.array(f['neighbors'])
-        
-    return train, test, neighbors
+        yield f['train'], f['test'], f['neighbors']

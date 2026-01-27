@@ -39,11 +39,14 @@ class VamanaIndexer:
         self._metric: int = int(config.metric)
 
     def _greedy_search(
-        self, entry_id: int, query_vector: np.ndarray, k: int, L: int, seen: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        self, entry_id: int, query_vector: np.ndarray, k: int, L: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
         """
         A helper wrapper for greedy search
         """
+        
+        bitset_size = (self.vector_store.size + 7) // 8
+        seen = np.zeros(bitset_size, dtype=np.uint8)
         return operations.greedy_search(
             entry_id=entry_id,
             query_vector=query_vector,
@@ -51,7 +54,7 @@ class VamanaIndexer:
             L=L,
             seen=seen,
             graph=self.graph.graph,
-            vectors=self.vector_store.vectors,
+            vectors=self.vector_store.get_vectors(),
             metric=self._metric,
         )
 
@@ -67,7 +70,7 @@ class VamanaIndexer:
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
-            vectors=self.vector_store.vectors,
+            vectors=self.vector_store.get_vectors(),
             metric=self._metric,
         )
 
@@ -81,7 +84,7 @@ class VamanaIndexer:
             L=self._L_build,
             entry_point=self.entry_point,  # type: ignore
             graph=self.graph.graph,
-            vectors=self.vector_store.vectors,
+            vectors=self.vector_store.get_vectors(),
             metric=self._metric,
         )
 
@@ -90,7 +93,7 @@ class VamanaIndexer:
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
-            vectors=self.vector_store.vectors,
+            vectors=self.vector_store.get_vectors(),
             metric=self._metric,
         )
 
@@ -130,7 +133,7 @@ class VamanaIndexer:
         else:
             batch_ids = self.vector_store.upsert_batch(vectors)  # type: ignore
 
-            if batch_ids.size == 0:
+            if len(batch_ids) == 0:
                 return [], False
 
         curr_size = self.vector_store.size
@@ -157,13 +160,11 @@ class VamanaIndexer:
             return []
 
         # TODO: In the future use Beam search instead
-        seen = np.zeros(self.vector_store.size, dtype=np.bool_)
-        results, dists, _ = self._greedy_search(
+        results, dists, _, _ = self._greedy_search(
             entry_id=self.entry_point,
             query_vector=query_vector,
             k=k,
             L=self._L_search,
-            seen=seen,
         )
 
         if results.size == 0:

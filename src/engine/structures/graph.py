@@ -64,7 +64,8 @@ class Graph:
             fill_value=-1, shape=(new_capacity, self._R), dtype=np.int32
         )
 
-        new_graph[:curr_capacity, :] = self.graph
+        curr_size = self._size
+        new_graph[:curr_size] = self.graph[:curr_size]
 
         self.graph = new_graph
         self._size = new_size
