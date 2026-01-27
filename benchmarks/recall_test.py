@@ -5,45 +5,51 @@ from dataset_loader import load_dataset
 @pytest.mark.parametrize("collection", [{"dim": 128, "name": "sift_small", "distance": "l2"}], indirect=True)
 def test_recall_siftsmall(collection):
     print("\n[Init] Loading SIFT-Small...")
-    base, query, ground_truth = load_dataset("siftsmall")
-    
-    benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
+    with load_dataset("siftsmall") as (base, query, ground_truth):
+        benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
+
+# @pytest.mark.parametrize("collection", [{"dim": 128, "name": "sift", "distance": "l2"}], indirect=True)
+# def test_recall_sift(collection):
+#     print("\n[Init] Loading SIFT...")
+
+#     with load_dataset("sift") as (base, query, ground_truth):
+#         benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
 
 def benchmark_recall(collection, base_vecs, query_vecs, ground_truth, expected_recall) -> None:
     """
     Benchmarks recall on a given dataset
-
-    Definition 1.1 (𝑘-recall@𝑘). For a query vector 𝑞 over
-    dataset 𝑃, suppose that (a) 𝐺 ⊆ 𝑃 is the set of actual 𝑘 nearest
-    neighbors in 𝑃, and (b) 𝑋 ⊆ 𝑃 is the output of a 𝑘-ANNS
-    query to an index. Then the 𝑘-recall@𝑘 for the index for
-    query 𝑞 is |𝑋 ∩𝐺 |
-    𝑘 . Recall for a set of queries refers to the
-    average recall over all queries.
     """
-
-    N_VEC = len(base_vecs)
+    
+    N_VEC = len(base_vecs) 
     K_SEARCH = 10
-    BATCH_SIZE = 1000
+    BATCH_SIZE = 5000 
 
     print(f"[Write] Upserting {N_VEC} vectors...")
-    ids = [str(i) for i in range(N_VEC)]
     
     for i in range(0, N_VEC, BATCH_SIZE):
-        batch_ids = ids[i : i + BATCH_SIZE]
-        batch_vecs = base_vecs[i : i + BATCH_SIZE].tolist()
+        limit = min(i + BATCH_SIZE, N_VEC)
+        
+        batch_ids = [str(j) for j in range(i, limit)]
+        
+        batch_vecs = base_vecs[i : limit].tolist()
+        
         collection.upsert(
             ids=batch_ids, 
-            vectors=batch_vecs,
-            batch_size=512
+            vectors=batch_vecs
         )
 
+        pct = (limit / N_VEC) * 100
+        print(f"\r[Write] Progress: {limit}/{N_VEC} ({pct:.1f}%)", end="", flush=True)
+
+    print("") 
     print(f"[Read] Running {len(query_vecs)} queries...")
     
     hits = 0
     total_expected = len(query_vecs) * K_SEARCH
     
-    for i, query_vec in enumerate(query_vecs):
+    query_vecs_loaded = query_vecs[:] 
+    
+    for i, query_vec in enumerate(query_vecs_loaded):
         results = collection.search(query=query_vec.tolist(), k=K_SEARCH)
         
         retrieved_ids = [int(r.vector.id) for r in results]
