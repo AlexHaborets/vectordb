@@ -346,7 +346,7 @@ def forward_indexing_pass(
         )
 
 
-@nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
+@nb.njit(fastmath=True, cache=True)
 def backward_indexing_pass(
     batch_ids: np.ndarray,
     alpha: float,
@@ -359,10 +359,12 @@ def backward_indexing_pass(
     Returns list of vector ids for which the graph was modified
     """
     batch_size = batch_ids.shape[0]
-    # Set of ids for which the graph was modified
-    modified_ids = np.zeros(vectors.shape[0], np.bool_)
 
-    for i in nb.prange(batch_size):
+    # Set of ids for which the graph was modified
+    modified_ids = np.empty(R, dtype=np.int32)
+    modified_count = 0 
+
+    for i in range(batch_size):
         query_id = batch_ids[i]
 
         query_neighbors = graph[query_id]
@@ -411,6 +413,15 @@ def backward_indexing_pass(
                 other_neighbors[empty_slot] = query_id
 
             # Add other to modified set
-            modified_ids[other] = True
 
-    return np.flatnonzero(modified_ids)
+            # resize dynamically
+            if modified_count >= len(modified_ids):
+                new_modified_ids = np.empty(len(modified_ids) * 2, dtype=np.int32)
+                new_modified_ids[:modified_count] = modified_ids[:modified_count]
+                modified_ids = new_modified_ids
+
+            modified_ids[modified_count] = other
+            modified_count += 1
+            
+
+    return modified_ids
