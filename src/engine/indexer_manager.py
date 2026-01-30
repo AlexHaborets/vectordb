@@ -140,6 +140,8 @@ class IndexerManager:
             L_build=config.VAMANA_L_BUILD,
             L_search=config.VAMANA_L_SEARCH,
             R=config.VAMANA_R,
+            alpha_first_pass=config.VAMANA_ALPHA_FIRST_PASS,
+            alpha_second_pass=config.VAMANA_ALPHA_SECOND_PASS
         )
 
         vectors_in_db = uow.vectors.get_all_vectors(collection.id)

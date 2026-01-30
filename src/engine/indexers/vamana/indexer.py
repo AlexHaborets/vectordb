@@ -9,14 +9,15 @@ from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
 from src.schemas.vector import VectorData
 
-
 @dataclass(frozen=True, order=True)
 class VamanaConfig:
     dims: int
     metric: MetricType
-    L_build: int = 64
-    L_search: int = 64
-    R: int = 32
+    L_build: int
+    L_search: int
+    R: int
+    alpha_first_pass: float
+    alpha_second_pass: float
 
 
 class VamanaIndexer:
@@ -37,10 +38,12 @@ class VamanaIndexer:
         self._L_search: int = config.L_search
         self._R: int = config.R
         self._metric: int = int(config.metric)
+        self.alpha_first_pass = config.alpha_first_pass
+        self.alpha_second_pass = config.alpha_second_pass
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         A helper wrapper for greedy search
         """
@@ -119,9 +122,9 @@ class VamanaIndexer:
         self.graph = Graph.random_regular(size=self.vector_store.size, degree=self._R)
         self.entry_point = self.get_medoid()
 
-        self._indexing_pass(alpha=1.0)
+        self._indexing_pass(alpha=self.alpha_first_pass)
 
-        self._indexing_pass(alpha=1.2)
+        self._indexing_pass(alpha=self.alpha_second_pass)
 
     def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
         # Returns list of modified ids
@@ -150,7 +153,9 @@ class VamanaIndexer:
             self.graph.resize(new_size=self.vector_store.size)
 
             modified_ids = self._index_batch(
-                batch_ids=np.array(batch_ids), alpha=1.2, return_mod_ids=True
+                batch_ids=np.array(batch_ids, dtype=np.int32), 
+                alpha=self.alpha_second_pass, 
+                return_mod_ids=True
             )
 
             return modified_ids, False
@@ -160,7 +165,7 @@ class VamanaIndexer:
             return []
 
         # TODO: In the future use Beam search instead
-        results, dists, _, _ = self._greedy_search(
+        results, dists, _, = self._greedy_search(
             entry_id=self.entry_point,
             query_vector=query_vector,
             k=k,

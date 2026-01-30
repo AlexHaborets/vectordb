@@ -3,7 +3,12 @@ import numpy as np
 
 from src.common.config import NUMPY_DTYPE
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+NUMBA_OPTIONS = {
+    "fastmath": True,
+    "cache": True, 
+}
+
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -12,7 +17,7 @@ def compute_dist_l2(a: np.ndarray, b: np.ndarray) -> float:
     return np.sqrt(sum_value)
 
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
@@ -20,7 +25,7 @@ def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     return 1 - sum_value
 
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
     if metric == 0:
         return compute_dist_l2(a, b)
@@ -28,7 +33,7 @@ def compute_dist(a: np.ndarray, b: np.ndarray, metric: int) -> float:
         return compute_dist_cosine(a, b)
 
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -39,7 +44,7 @@ def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray
     return dists
 
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.ndarray:
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
@@ -50,7 +55,7 @@ def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.nda
     return dists
 
 
-@nb.njit(fastmath=True, inline="always", cache=True)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def compute_dists_batch(
     query: np.ndarray, targets: np.ndarray, metric: int
 ) -> np.ndarray:
@@ -60,7 +65,7 @@ def compute_dists_batch(
         return compute_dists_batch_cosine(query, targets)
 
 
-@nb.njit(fastmath=True, cache=True)
+@nb.njit(**NUMBA_OPTIONS)
 def insort(
     ids: np.ndarray,
     dists: np.ndarray,
@@ -100,7 +105,7 @@ def insort(
 
 
 
-@nb.njit(fastmath=True, cache=True)
+@nb.njit(**NUMBA_OPTIONS)
 def count_neighbors(neighbors_array: np.ndarray) -> int:
     count = 0
     for i in range(neighbors_array.shape[0]):
@@ -115,16 +120,16 @@ def count_neighbors(neighbors_array: np.ndarray) -> int:
 # x // 8 is eq to x >> 3 
 
 # x % 8 is eq to x & 7 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(**NUMBA_OPTIONS)
 def set_bit(bitset: np.ndarray, index: int) -> None:
     bitset[index >> 3] |= (1 << (index & 7))
 
-@nb.njit(fastmath=True, inline="always")
+@nb.njit(**NUMBA_OPTIONS)
 def get_bit(bitset: np.ndarray, index: int) -> bool:
     return (bitset[index >> 3] >> (index & 7)) & 1
 
 
-@nb.njit(fastmath=True, cache=True)
+@nb.njit(**NUMBA_OPTIONS)
 def greedy_search(
     entry_id: int,
     query_vector: np.ndarray,
@@ -134,7 +139,7 @@ def greedy_search(
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Data: Graph G with start node s, query xq, result
         size k, search list size L ≥ k
@@ -205,10 +210,10 @@ def greedy_search(
                     max_size=L,
                 )
 
-    return candidates_ids[:k], candidates_dists[:k], visited, visited_count
+    return candidates_ids[:k], candidates_dists[:k], visited[:visited_count]
 
 
-@nb.njit(fastmath=True, cache=True)
+@nb.njit(**NUMBA_OPTIONS)
 def robust_prune(
     source_id: int,
     candidates_ids: np.ndarray,
@@ -288,7 +293,7 @@ def robust_prune(
 
     graph[source_id] = neighbors 
 
-@nb.njit(fastmath=True, parallel=True, nogil=True, cache=True)
+@nb.njit(parallel=True, **NUMBA_OPTIONS)
 def forward_indexing_pass(
     batch_ids: np.ndarray,
     alpha: float,
@@ -304,10 +309,8 @@ def forward_indexing_pass(
     """
 
     batch_size = batch_ids.shape[0]
-    vector_count = vectors.shape[0]
-    visited_map = np.empty(shape=(batch_size, L*4), dtype=np.int32)
-    visited_counts = np.zeros_like(batch_ids, dtype=np.int32)
-                  
+    vector_count = vectors.shape[0]     
+
                   # (x + y - 1) // y
                   # (x + 8 - 1) // 8
     bitset_size = (vector_count + 7) // 8
@@ -317,7 +320,8 @@ def forward_indexing_pass(
         query_vector = vectors[query_id]
 
         seen = np.zeros(bitset_size, dtype=np.uint8)
-        _, _, visited, count = greedy_search(
+
+        _, _, visited = greedy_search(
             entry_id=entry_point,
             query_vector=query_vector,
             k=1,
@@ -327,17 +331,10 @@ def forward_indexing_pass(
             vectors=vectors,
             metric=metric,
         )   
-
-        visited_counts[i] = count
-        visited_map[i, :count] = visited[:count]
-    
-    for i in range(batch_size): 
-        query_id = batch_ids[i]
-        count = visited_counts[i]
-        candidate_ids = visited_map[i, :count]
+        
         robust_prune(
             source_id=query_id,
-            candidates_ids=candidate_ids,
+            candidates_ids=visited,
             alpha=alpha,
             R=R,
             graph=graph,
@@ -346,7 +343,7 @@ def forward_indexing_pass(
         )
 
 
-@nb.njit(fastmath=True, cache=True)
+@nb.njit(**NUMBA_OPTIONS)
 def backward_indexing_pass(
     batch_ids: np.ndarray,
     alpha: float,
@@ -361,8 +358,7 @@ def backward_indexing_pass(
     batch_size = batch_ids.shape[0]
 
     # Set of ids for which the graph was modified
-    modified_ids = np.empty(R, dtype=np.int32)
-    modified_count = 0 
+    modified_ids = np.zeros(vectors.shape[0], dtype=np.bool_)
 
     for i in range(batch_size):
         query_id = batch_ids[i]
@@ -413,15 +409,7 @@ def backward_indexing_pass(
                 other_neighbors[empty_slot] = query_id
 
             # Add other to modified set
-
-            # resize dynamically
-            if modified_count >= len(modified_ids):
-                new_modified_ids = np.empty(len(modified_ids) * 2, dtype=np.int32)
-                new_modified_ids[:modified_count] = modified_ids[:modified_count]
-                modified_ids = new_modified_ids
-
-            modified_ids[modified_count] = other
-            modified_count += 1
+            modified_ids[other] = True
             
 
-    return modified_ids
+    return np.flatnonzero(modified_ids)
