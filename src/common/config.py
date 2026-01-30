@@ -25,7 +25,9 @@ AUTO_SAVE_INDEX_PERIOD = 2 # seconds
 INDEX_RND_SAMPLE_SIZE = 512
 
 """
+#################
 Indexing settings
+#################
 """
 
 # Search list size when building the index
@@ -34,6 +36,10 @@ VAMANA_L_BUILD = 32
 VAMANA_L_SEARCH = 32
 
 VAMANA_R = 16
+
+VAMANA_ALPHA_FIRST_PASS = 1.0
+
+VAMANA_ALPHA_SECOND_PASS = 1.2
 
 # Decimal places to round the similarity score
 # between the query and vectors-results from search
