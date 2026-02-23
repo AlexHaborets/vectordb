@@ -9,6 +9,7 @@ from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
 from src.schemas.vector import VectorData
 
+
 @dataclass(frozen=True, order=True)
 class VamanaConfig:
     dims: int
@@ -47,7 +48,7 @@ class VamanaIndexer:
         """
         A helper wrapper for greedy search
         """
-        
+
         bitset_size = (self.vector_store.size + 7) // 8
         seen = np.zeros(bitset_size, dtype=np.uint8)
         return operations.greedy_search(
@@ -153,9 +154,9 @@ class VamanaIndexer:
             self.graph.resize(new_size=self.vector_store.size)
 
             modified_ids = self._index_batch(
-                batch_ids=np.array(batch_ids, dtype=np.int32), 
-                alpha=self.alpha_second_pass, 
-                return_mod_ids=True
+                batch_ids=np.array(batch_ids, dtype=np.int32),
+                alpha=self.alpha_second_pass,
+                return_mod_ids=True,
             )
 
             return modified_ids, False
@@ -165,7 +166,11 @@ class VamanaIndexer:
             return []
 
         # TODO: In the future use Beam search instead
-        results, dists, _, = self._greedy_search(
+        (
+            results,
+            dists,
+            _,
+        ) = self._greedy_search(
             entry_id=self.entry_point,
             query_vector=query_vector,
             k=k,
@@ -178,7 +183,7 @@ class VamanaIndexer:
         if self._metric != MetricType.L2:
             scores = 1.0 - dists
         else:
-            scores = 1 / (1 + dists) # type: ignore
+            scores = 1 / (1 + dists)  # type: ignore
 
         query_results = [
             (score, self.vector_store.get_dbid(idx))
