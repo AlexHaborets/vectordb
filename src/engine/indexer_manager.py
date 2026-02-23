@@ -213,7 +213,7 @@ class IndexerManager:
                 value=str(entry_point),
             )
 
-    def update(self, collection_name: str, vectors: List[Vector], uow: UnitOfWork):
+    def update(self, collection_name: str, vectors: List[Vector], uow: UnitOfWork) -> None:
         indexer = self.get_indexer(collection_name, uow)
         modified_ids: List[int]
         full_rebuild: bool
