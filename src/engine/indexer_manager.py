@@ -1,11 +1,10 @@
 from collections import defaultdict
 import copy
+import time
 from typing import Dict, List
 import threading
 
 from loguru import logger
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.exc import IntegrityError
 
 import src.common.config as config
@@ -26,19 +25,29 @@ class IndexerManager:
 
         self._save_queue = defaultdict(set)
         self._save_queue_lock = threading.RLock()
-        self._background_worker = BackgroundScheduler()
 
-        self._background_worker.add_job(
-            func=self._persist_job,
-            trigger=IntervalTrigger(seconds=config.AUTO_SAVE_INDEX_PERIOD),
-            coalesce=True,
-            max_instances=1,
-            replace_existing=True,
-        )
-        self._background_worker.start()
+        self.PERSIST_SIZE = 5000
+
+        self._persist_event = threading.Event()
+        self._running = True
+
+        self._worker = threading.Thread(target=self._persist_loop, daemon=True)
+        self._worker.start()
 
     def stop(self) -> None:
-        self._background_worker.shutdown()
+        self._running = False
+        self._persist_event.set()
+        self._worker.join()
+
+    def _persist_loop(self) -> None:
+        while self._running:
+            self._persist_event.wait(timeout=5.0)
+            self._persist_event.clear()
+
+            if not self._running:
+                break
+
+            self._persist_job()
 
     def _persist_job(self) -> None:
         save_queue_snapshot = {}
@@ -51,15 +60,28 @@ class IndexerManager:
 
         for collection_name, ids in save_queue_snapshot.items():
             ids_list = list(ids)
-            try:
-                self._persist_index(collection_name, ids_list)
-            except Exception as e:
-                logger.error(f"Failed to persist index for {collection_name}: {e}")
-                self._enqueue_ids(collection_name, ids_list)
+
+            BATCH_SIZE = 500
+            for i in range(0, len(ids_list), BATCH_SIZE):
+                chunk = ids_list[i : i + BATCH_SIZE]
+                try:
+                    self._persist_index(collection_name, chunk)
+                    
+                    time.sleep(0.05)
+                except Exception as e:
+                    logger.error(f"Failed to persist index for {collection_name}: {e}")
+
+                    with self._save_queue_lock:
+                        self._save_queue[collection_name].update(chunk)
 
     def _enqueue_ids(self, collection_name: str, ids: List[int]) -> None:
         with self._save_queue_lock:
             self._save_queue[collection_name].update(ids)
+
+            curr_size = len(self._save_queue[collection_name])
+
+            if curr_size >= self.PERSIST_SIZE:
+                self._persist_event.set()
 
     def _persist_index(self, collection_name: str, ids: List[int]) -> None:
         subgraph = None
@@ -75,7 +97,7 @@ class IndexerManager:
         with indexer_lock:
             if collection_name not in self._indexers:
                 return
-            
+
             indexer = self._indexers[collection_name]
 
             subgraph = indexer.graph.get_subgraph(
@@ -85,7 +107,7 @@ class IndexerManager:
         if subgraph:
             try:
                 uow = DBUnitOfWork(session_manager.get_session_factory())
-                
+
                 with uow:
                     collection = uow.collections.get_collection_by_name(collection_name)
 
@@ -96,7 +118,7 @@ class IndexerManager:
                     )
             except IntegrityError:
                 return
-            
+
     def get_indexer(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         with self._lock:
             if collection_name in self._indexers:
@@ -128,7 +150,6 @@ class IndexerManager:
             if collection_name in self._save_queue:
                 del self._save_queue[collection_name]
 
-
     def _load_from_db(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)
         if not collection:
@@ -141,7 +162,7 @@ class IndexerManager:
             L_search=config.VAMANA_L_SEARCH,
             R=config.VAMANA_R,
             alpha_first_pass=config.VAMANA_ALPHA_FIRST_PASS,
-            alpha_second_pass=config.VAMANA_ALPHA_SECOND_PASS
+            alpha_second_pass=config.VAMANA_ALPHA_SECOND_PASS,
         )
 
         vectors_in_db = uow.vectors.get_all_vectors(collection.id)
@@ -213,7 +234,9 @@ class IndexerManager:
                 value=str(entry_point),
             )
 
-    def update(self, collection_name: str, vectors: List[Vector], uow: UnitOfWork) -> None:
+    def update(
+        self, collection_name: str, vectors: List[Vector], uow: UnitOfWork
+    ) -> None:
         indexer = self.get_indexer(collection_name, uow)
         modified_ids: List[int]
         full_rebuild: bool

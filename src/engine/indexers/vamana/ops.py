@@ -6,6 +6,7 @@ from src.common.config import NUMPY_DTYPE
 NUMBA_OPTIONS = {
     "fastmath": True,
     "cache": True,
+    "boundscheck": True,
 }
 
 
@@ -39,7 +40,7 @@ def compute_dists_batch_l2(query: np.ndarray, targets: np.ndarray) -> np.ndarray
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
 
-    for i in nb.prange(n):
+    for i in range(n):
         dists[i] = compute_dist_l2(a=query, b=targets[i])
 
     return dists
@@ -50,7 +51,7 @@ def compute_dists_batch_cosine(query: np.ndarray, targets: np.ndarray) -> np.nda
     n = targets.shape[0]
     dists = np.empty(n, dtype=NUMPY_DTYPE)
 
-    for i in nb.prange(n):
+    for i in range(n):
         dists[i] = compute_dist_cosine(a=query, b=targets[i])
 
     return dists
