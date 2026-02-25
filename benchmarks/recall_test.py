@@ -8,12 +8,12 @@ def test_recall_siftsmall(collection):
     with load_dataset("siftsmall") as (base, query, ground_truth):
         benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
 
-# @pytest.mark.parametrize("collection", [{"dim": 128, "name": "sift", "distance": "l2"}], indirect=True)
-# def test_recall_sift(collection):
-#     print("\n[Init] Loading SIFT...")
+@pytest.mark.parametrize("collection", [{"dim": 128, "name": "sift", "distance": "l2"}], indirect=True)
+def test_recall_sift(collection):
+    print("\n[Init] Loading SIFT...")
 
-#     with load_dataset("sift") as (base, query, ground_truth):
-#         benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
+    with load_dataset("sift") as (base, query, ground_truth):
+        benchmark_recall(collection, base, query, ground_truth, expected_recall=0.90)
 
 def benchmark_recall(collection, base_vecs, query_vecs, ground_truth, expected_recall) -> None:
     """
@@ -35,7 +35,8 @@ def benchmark_recall(collection, base_vecs, query_vecs, ground_truth, expected_r
         
         collection.upsert(
             ids=batch_ids, 
-            vectors=batch_vecs
+            vectors=batch_vecs,
+            batch_size=512
         )
 
         pct = (limit / N_VEC) * 100

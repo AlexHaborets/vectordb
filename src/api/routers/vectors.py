@@ -23,17 +23,19 @@ def upsert(
     uow: Annotated[UnitOfWork, Depends(get_uow)],
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[Vector]:
+    vectors_in_db: List[Vector]
     with uow:
         vectors_in_db = collection_service.upsert_vectors(
             collection_name, batch.vectors, uow
         )
+    with uow:
         index_service.update(
             collection_name=collection_name,
             vectors=vectors_in_db,
             indexer_manager=indexer_manager,
             uow=uow,
         )
-        return vectors_in_db
+    return vectors_in_db
 
 
 @vector_router.get("/{vector_id}", response_model=Vector)

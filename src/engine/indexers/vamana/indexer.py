@@ -166,6 +166,7 @@ class VamanaIndexer:
             return []
 
         # TODO: In the future use Beam search instead
+        l_search = max(self._L_search, k + 50)
         (
             results,
             dists,
@@ -174,7 +175,7 @@ class VamanaIndexer:
             entry_id=self.entry_point,
             query_vector=query_vector,
             k=k,
-            L=self._L_search,
+            L=l_search,
         )
 
         if results.size == 0:

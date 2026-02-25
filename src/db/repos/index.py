@@ -25,17 +25,21 @@ class IndexRepository:
         return graph
     
     def update_graph(self, collection_id: int, subgraph: Dict[int, List[int]]):
-        ids = subgraph.keys()
+        ids = list(subgraph.keys())
         if not ids:
             return
         
-        self.session.execute(
-            models.graph_association_table.delete().where(
-                (models.graph_association_table.c.collection_id == collection_id) & 
-                (models.graph_association_table.c.source_id.in_(ids)) 
+        DELETE_BATCH_SIZE = 512
+        for i in range(0, len(ids), DELETE_BATCH_SIZE):
+            chunk_ids = ids[i : i + DELETE_BATCH_SIZE]
+            self.session.execute(
+                models.graph_association_table.delete().where(
+                    (models.graph_association_table.c.collection_id == collection_id) & 
+                    (models.graph_association_table.c.source_id.in_(chunk_ids)) 
+                )
             )
-        )
-        
+
+        INSERT_BATCH_SIZE = 4096
         data = []
         for src, neighbors in subgraph.items():
             for neighbor in neighbors:
@@ -46,6 +50,9 @@ class IndexRepository:
                         "collection_id": collection_id,
                     }
                 )
+                if len(data) >= INSERT_BATCH_SIZE:
+                    self.session.execute(models.graph_association_table.insert(), data)
+                    data = []
 
         if data:
             self.session.execute(models.graph_association_table.insert(), data)
