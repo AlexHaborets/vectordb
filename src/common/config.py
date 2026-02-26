@@ -24,9 +24,8 @@ DATABASE_URL = f"sqlite:///{DB_FILE}"
 INDEX_RND_SAMPLE_SIZE = 512
 
 """
-#################
 Indexing settings
-#################
+THESE CAN BE MODIFIED
 """
 
 # Search list size when building the index
@@ -34,11 +33,15 @@ VAMANA_L_BUILD = 80
 # Search list size during quering
 VAMANA_L_SEARCH = 60
 
+# NOTE: L has to be greater than R for the algorithm to work
+
 VAMANA_R = 32
 
 VAMANA_ALPHA_FIRST_PASS = 1.0
 
 VAMANA_ALPHA_SECOND_PASS = 1.2
+
+# NOTE: Optimal alpha is within 1.0 to 2.0
 
 # Decimal places to round the similarity score
 # between the query and vectors-results from search
