@@ -25,7 +25,6 @@ It is designed for educational purposes and lightweight use cases, including sem
 | **Recall@10** | SIFT-Small (10k vectors, 128d) | **0.9960** |
 | **Recall@10** | SIFT1M (1M vectors, 128d) | **0.9346** |
 
-
 These benchmarks were achieved using the following Vamana graph indexing config:
 
 | Parameter | Value | Description |
@@ -35,6 +34,8 @@ These benchmarks were achieved using the following Vamana graph indexing config:
 | `VAMANA_L_SEARCH` | `60` | Search list size during querying |
 | `VAMANA_ALPHA_FIRST_PASS` | `1.0` | Distance multiplier (First pass) |
 | `VAMANA_ALPHA_SECOND_PASS` | `1.2` | Distance multiplier (Second pass) |
+
+> Note: These parameters can be modified in the `src/common/config.py` file.
 
 ## 🚀 Getting Started
 
