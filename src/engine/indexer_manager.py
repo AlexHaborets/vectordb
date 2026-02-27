@@ -1,7 +1,7 @@
 from collections import defaultdict
 import copy
 import time
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import threading
 
 from loguru import logger
@@ -14,7 +14,7 @@ from src.db.uow import DBUnitOfWork
 from src.engine import VamanaConfig, VamanaIndexer
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
-from src.schemas import Vector, VectorData
+from src.schemas import Query, Vector, VectorData
 
 
 class IndexerManager:
@@ -66,7 +66,7 @@ class IndexerManager:
                 chunk = ids_list[i : i + BATCH_SIZE]
                 try:
                     self._persist_index(collection_name, chunk)
-                    
+
                     time.sleep(0.05)
                 except Exception as e:
                     logger.error(f"Failed to persist index for {collection_name}: {e}")
@@ -249,6 +249,13 @@ class IndexerManager:
             self._save_to_db(collection_name, uow)
         else:
             self._enqueue_ids(collection_name, modified_ids)
+
+    def search(
+        self, collection_name: str, query: Query, uow: UnitOfWork
+    ) -> List[Tuple[float, int]]:
+        indexer = self.get_indexer(collection_name, uow)
+        with self._indexers_locks[collection_name]:
+            return indexer.search(query.numpy_vector, query.k)
 
     def save_all(self, uow: UnitOfWork) -> None:
         with self._lock:

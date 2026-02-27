@@ -1,5 +1,4 @@
 from typing import Dict, List
-from src import schemas
 from src.common import config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork
@@ -18,16 +17,23 @@ class IndexService:
         indexer_manager: IndexerManager,
         uow: UnitOfWork,
     ) -> List[SearchResult]:
-        indexer = indexer_manager.get_indexer(collection_name, uow)
-        query_results = indexer.search(query.numpy_vector, query.k)
-        collection = uow.collections.get_collection_by_name(collection_name)
-        if not collection:
-            raise CollectionNotFoundError(collection_name)
-        vectors = uow.vectors.get_vectors_by_ids(
-            collection_id=collection.id, ids=[result[1] for result in query_results]
-        )
-        id_to_vector: Dict[int, schemas.Vector] = {
-            v.id: schemas.Vector.model_validate(v) for v in vectors
+        with uow:
+            collection = uow.collections.get_collection_by_name(collection_name)
+            if not collection:
+                raise CollectionNotFoundError(collection_name)
+            
+            query_results = indexer_manager.search(
+                collection_name=collection_name, 
+                query=query,
+                uow=uow
+            )
+
+            vectors = uow.vectors.get_vectors_by_ids(
+                collection_id=collection.id, ids=[result[1] for result in query_results]
+            )
+
+        id_to_vector: Dict[int, Vector] = {
+            v.id: Vector.model_validate(v) for v in vectors
         }
 
         results: List[SearchResult] = []
@@ -38,8 +44,9 @@ class IndexService:
                     vector=id_to_vector[vector_id],
                 )
             )
+            
         return results
-
+    
     def update(
         self,
         collection_name: str,
