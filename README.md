@@ -19,18 +19,18 @@ It is designed for educational purposes and lightweight use cases, including sem
 
 | Metric | Dataset | Result |
 | :--- | :--- | :--- |
-| **Indexing Throughput** | 10k vectors (384d) | **1210.88 vec/s** |
-| **Query Latency (Avg)** | 10k vectors (384d) | **6.30 ms** |
-| **Query Latency (P95)** | 10k vectors (384d) | **9.35 ms** |
+| **Indexing Throughput** | 10k vectors (384d) | **1176.29 vec/s** |
+| **Query Latency (Avg)** | 10k vectors (384d) | **6.84 ms** |
+| **Query Latency (P95)** | 10k vectors (384d) | **9.87 ms** |
 | **Recall@10** | SIFT-Small (10k vectors, 128d) | **0.9960** |
-| **Recall@10** | SIFT1M (1M vectors, 128d) | **0.9346** |
+| **Recall@10** | SIFT1M (1M vectors, 128d) | **0.9573** |
 
 These benchmarks were achieved using the following Vamana graph indexing config:
 
 | Parameter | Value | Description |
 | :--- | :--- | :--- |
-| `VAMANA_R` | `32` | Maximum graph degree |
-| `VAMANA_L_BUILD` | `80` | Search list size during index building |
+| `VAMANA_R` | `40` | Maximum graph degree |
+| `VAMANA_L_BUILD` | `100` | Search list size during index building |
 | `VAMANA_L_SEARCH` | `60` | Search list size during querying |
 | `VAMANA_ALPHA_FIRST_PASS` | `1.0` | Distance multiplier (First pass) |
 | `VAMANA_ALPHA_SECOND_PASS` | `1.2` | Distance multiplier (Second pass) |
