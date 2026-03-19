@@ -39,8 +39,8 @@ class VamanaIndexer:
         self._L_search: int = config.L_search
         self._R: int = config.R
         self._metric: int = int(config.metric)
-        self.alpha_first_pass = config.alpha_first_pass
-        self.alpha_second_pass = config.alpha_second_pass
+        self._alpha_first_pass = config.alpha_first_pass
+        self._alpha_second_pass = config.alpha_second_pass
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
@@ -123,9 +123,9 @@ class VamanaIndexer:
         self.graph = Graph.random_regular(size=self.vector_store.size, degree=self._R)
         self.entry_point = self.get_medoid()
 
-        self._indexing_pass(alpha=self.alpha_first_pass)
+        self._indexing_pass(alpha=self._alpha_first_pass)
 
-        self._indexing_pass(alpha=self.alpha_second_pass)
+        self._indexing_pass(alpha=self._alpha_second_pass)
 
     def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
         # Returns list of modified ids
@@ -140,11 +140,7 @@ class VamanaIndexer:
             if len(batch_ids) == 0:
                 return [], False
 
-        curr_size = self.vector_store.size
-
-        should_rebuild = (
-            self.entry_point is None or curr_size < 10000 and len(batch_ids) > 1000
-        )
+        should_rebuild = self.entry_point is None
 
         if should_rebuild:
             self.index()
@@ -155,7 +151,7 @@ class VamanaIndexer:
 
             modified_ids = self._index_batch(
                 batch_ids=np.array(batch_ids, dtype=np.int32),
-                alpha=self.alpha_second_pass,
+                alpha=self._alpha_second_pass,
                 return_mod_ids=True,
             )
 
