@@ -10,6 +10,7 @@ from vectordb import Client, Collection
 
 BASE_URL = "http://localhost:8000"
 
+
 @pytest.fixture(scope="session", autouse=True)
 def server() -> Generator[None, Any, None]:
     """
@@ -17,12 +18,12 @@ def server() -> Generator[None, Any, None]:
     """
     proc = subprocess.Popen(
         ["uvicorn", "src.main:app", "--port", "8000"],
-        # stdout=subprocess.DEVNULL,
-        # stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid,  
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        preexec_fn=os.setsid,
     )
 
-    # Healthcheck 
+    # Healthcheck
     start_time = time.time()
     while time.time() - start_time < 5:
         try:
