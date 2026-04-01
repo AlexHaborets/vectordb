@@ -1,8 +1,8 @@
-from collections import defaultdict
 import copy
-import time
-from typing import Dict, List, Tuple
 import threading
+import time
+from collections import defaultdict
+from typing import Dict, List, Tuple
 
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
