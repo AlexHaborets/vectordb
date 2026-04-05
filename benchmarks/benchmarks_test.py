@@ -180,22 +180,22 @@ def run_benchmark(
 # ==========================================
 
 
-@pytest.mark.parametrize(
-    "collection, dataset_name, thresholds",
-    [
-        (
-            {"dim": 128, "name": "sift_small", "distance": "l2"},
-            "siftsmall",
-            BenchmarkThresholds(
-                min_throughput=700.0, max_avg_latency=15.0, min_recall=0.90
-            ),
-        )
-    ],
-    indirect=["collection"],
-)
-def test_benchmark_siftsmall(collection, dataset_name, thresholds):
-    with load_dataset(dataset_name) as (base, query, ground_truth):
-        run_benchmark(collection, base, query, ground_truth, thresholds)
+# @pytest.mark.parametrize(
+#     "collection, dataset_name, thresholds",
+#     [
+#         (
+#             {"dim": 128, "name": "sift_small", "distance": "l2"},
+#             "siftsmall",
+#             BenchmarkThresholds(
+#                 min_throughput=700.0, max_avg_latency=15.0, min_recall=0.90
+#             ),
+#         )
+#     ],
+#     indirect=["collection"],
+# )
+# def test_benchmark_siftsmall(collection, dataset_name, thresholds):
+#     with load_dataset(dataset_name) as (base, query, ground_truth):
+#         run_benchmark(collection, base, query, ground_truth, thresholds)
 
 
 # @pytest.mark.parametrize(
@@ -214,19 +214,19 @@ def test_benchmark_siftsmall(collection, dataset_name, thresholds):
 #         run_benchmark(collection, base, query, ground_truth, thresholds)
 
 
-# @pytest.mark.parametrize(
-#     "collection, dataset_name, thresholds",
-#     [
-#         (
-#             {"dim": 100, "name": "glove", "distance": "cosine"},
-#             "glove",
-#             BenchmarkThresholds(
-#                 min_throughput=100.0, max_avg_latency=25.0, min_recall=0.85
-#             ),
-#         )
-#     ],
-#     indirect=["collection"],
-# )
-# def test_benchmark_glove(collection, dataset_name, thresholds):
-#     with load_dataset(dataset_name) as (base, query, ground_truth):
-#         run_benchmark(collection, base, query, ground_truth, thresholds)
+@pytest.mark.parametrize(
+    "collection, dataset_name, thresholds",
+    [
+        (
+            {"dim": 100, "name": "glove", "distance": "cosine"},
+            "glove",
+            BenchmarkThresholds(
+                min_throughput=100.0, max_avg_latency=25.0, min_recall=0.85
+            ),
+        )
+    ],
+    indirect=["collection"],
+)
+def test_benchmark_glove(collection, dataset_name, thresholds):
+    with load_dataset(dataset_name) as (base, query, ground_truth):
+        run_benchmark(collection, base, query, ground_truth, thresholds)
