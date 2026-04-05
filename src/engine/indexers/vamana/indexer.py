@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
+from loguru import logger
 
 import src.engine.indexers.vamana.ops as operations
 from src.common import MetricType, config
+from src.engine.indexers.vamana.controller import AlphaController
 from src.engine.structures.graph import Graph
 from src.engine.structures.vector_store import VectorStore
 from src.schemas.vector import VectorData
@@ -41,6 +43,103 @@ class VamanaIndexer:
         self._metric: int = int(config.metric)
         self._alpha_first_pass = config.alpha_first_pass
         self._alpha_second_pass = config.alpha_second_pass
+
+        target_degree = self._R * 0.85
+        k_plant = 0.8 * self._R
+        kp = 0.15 / k_plant
+        ki = kp / 10.0
+
+        self.alpha_controller = AlphaController(
+            target_degree=target_degree,
+            kp=kp,
+            ki=ki,
+            alpha_init=self._alpha_second_pass,
+        )
+
+    def index(self) -> None:
+        self.graph = Graph.random_regular(size=self.vector_store.size, degree=self._R)
+        self.entry_point = self._get_medoid()
+
+        self._indexing_pass(alpha=self._alpha_first_pass)
+
+        self._indexing_pass(alpha=self._alpha_second_pass)
+
+    def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
+        if not vectors:
+            return [], False
+
+        if isinstance(vectors[0], int):
+            batch_ids = vectors
+        else:
+            batch_ids = self.vector_store.upsert_batch(vectors)  # type: ignore
+
+            if len(batch_ids) == 0:
+                return [], False
+
+        should_rebuild = self.entry_point is None
+
+        if should_rebuild:
+            self.index()
+
+            return [], True
+        else:
+            self.graph.resize(new_size=self.vector_store.size)
+
+            alpha = self.alpha_controller.get_alpha()
+
+            forward_ids, backward_ids = self._index_batch(
+                batch_ids=np.array(batch_ids, dtype=np.int32),
+                alpha=alpha,
+                return_mod_ids=True,
+            )
+
+            if backward_ids:
+                total_edges = sum(
+                    np.count_nonzero(self.graph.graph[node_id] != -1)
+                    for node_id in backward_ids
+                )
+                avg_degree = total_edges / len(backward_ids)
+
+                self.alpha_controller.feedback(avg_degree)
+                logger.info(f"alpha={alpha:.4f}, avg_degree={avg_degree:.2f}")
+
+            modified_ids = list(set(forward_ids + backward_ids))
+
+            return modified_ids, False
+
+    def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
+        if self.entry_point is None:
+            return []
+
+        # TODO: In the future use Beam search instead
+        l_search = max(self._L_search, k + 50)
+        (
+            results,
+            dists,
+            _,
+        ) = self._greedy_search(
+            entry_id=self.entry_point,
+            query_vector=query_vector,
+            k=k,
+            L=l_search,
+        )
+
+        if results.size == 0:
+            return []
+
+        if self._metric != MetricType.L2:
+            scores = 1.0 - dists
+        else:
+            scores = 1 / (1 + dists)  # type: ignore
+
+        query_results = [
+            (score, self.vector_store.get_dbid(idx))
+            for score, idx in zip(scores, results)
+        ]
+
+        query_results.sort(key=lambda x: x[0], reverse=True)
+
+        return query_results
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
@@ -80,7 +179,7 @@ class VamanaIndexer:
 
     def _index_batch(
         self, batch_ids: np.ndarray, alpha: float, return_mod_ids: bool = False
-    ) -> List[int]:
+    ) -> tuple[List[int], List[int]]:
         operations.forward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
@@ -102,12 +201,9 @@ class VamanaIndexer:
         )
 
         if return_mod_ids:
-            forward_ids = batch_ids.tolist()
-            backward_ids = backward_ids_np.tolist()
-            modified_ids = list(set(forward_ids + backward_ids))
-            return modified_ids
+            return batch_ids.tolist(), backward_ids_np.tolist()
         else:
-            return []
+            return [], []
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()
@@ -115,83 +211,7 @@ class VamanaIndexer:
 
         self._index_batch(batch_ids=sigma, alpha=alpha)
 
-    def index(self) -> None:
-        """
-        Data: Database P with n points where i-th point has coords xi, parameters α, L, R
-        Result: Directed graph G over P with out-degree <=R
-        """
-        self.graph = Graph.random_regular(size=self.vector_store.size, degree=self._R)
-        self.entry_point = self.get_medoid()
-
-        self._indexing_pass(alpha=self._alpha_first_pass)
-
-        self._indexing_pass(alpha=self._alpha_second_pass)
-
-    def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
-        # Returns list of modified ids
-        if not vectors:
-            return [], False
-
-        if isinstance(vectors[0], int):
-            batch_ids = vectors
-        else:
-            batch_ids = self.vector_store.upsert_batch(vectors)  # type: ignore
-
-            if len(batch_ids) == 0:
-                return [], False
-
-        should_rebuild = self.entry_point is None
-
-        if should_rebuild:
-            self.index()
-
-            return [], True
-        else:
-            self.graph.resize(new_size=self.vector_store.size)
-
-            modified_ids = self._index_batch(
-                batch_ids=np.array(batch_ids, dtype=np.int32),
-                alpha=self._alpha_second_pass,
-                return_mod_ids=True,
-            )
-
-            return modified_ids, False
-
-    def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
-        if self.entry_point is None:
-            return []
-
-        # TODO: In the future use Beam search instead
-        l_search = max(self._L_search, k + 50)
-        (
-            results,
-            dists,
-            _,
-        ) = self._greedy_search(
-            entry_id=self.entry_point,
-            query_vector=query_vector,
-            k=k,
-            L=l_search,
-        )
-
-        if results.size == 0:
-            return []
-
-        if self._metric != MetricType.L2:
-            scores = 1.0 - dists
-        else:
-            scores = 1 / (1 + dists)  # type: ignore
-
-        query_results = [
-            (score, self.vector_store.get_dbid(idx))
-            for score, idx in zip(scores, results)
-        ]
-
-        query_results.sort(key=lambda x: x[0], reverse=True)
-
-        return query_results
-
-    def get_medoid(self) -> int:
+    def _get_medoid(self) -> int:
         sample_vectors, ids = self.vector_store.get_random_sample(
             config.INDEX_RND_SAMPLE_SIZE
         )

@@ -24,7 +24,7 @@ def compute_dist_cosine(a: np.ndarray, b: np.ndarray) -> float:
     sum_value = 0.0
     for i in range(a.shape[0]):
         sum_value += a[i] * b[i]
-    return max(0.0, 1 - sum_value)
+    return 1 - sum_value
 
 
 @nb.njit(inline="always", **NUMBA_OPTIONS)
