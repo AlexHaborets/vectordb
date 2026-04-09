@@ -12,8 +12,8 @@ from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork, session_manager
 from src.db.uow import DBUnitOfWork
 from src.engine import VamanaConfig, VamanaIndexer
-from src.engine.structures.graph import Graph
-from src.engine.structures.vector_store import VectorStore
+from src.engine.indexers.vamana.graph import Graph
+from src.engine.indexers.vamana.vector_store import VectorStore
 from src.schemas import Query, Vector, VectorData
 
 

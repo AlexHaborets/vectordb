@@ -123,14 +123,43 @@ def count_neighbors(neighbors_array: np.ndarray) -> int:
 
 
 # x % 8 is eq to x & 7
-@nb.njit(**NUMBA_OPTIONS)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def set_bit(bitset: np.ndarray, index: int) -> None:
     bitset[index >> 3] |= 1 << (index & 7)
 
 
-@nb.njit(**NUMBA_OPTIONS)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def get_bit(bitset: np.ndarray, index: int) -> bool:
     return (bitset[index >> 3] >> (index & 7)) & 1
+
+
+@nb.njit(inline="always", **NUMBA_OPTIONS)
+def clear_bit(bitset: np.ndarray, index: int) -> None:
+    bitset[index >> 3] &= np.uint8(255 - (1 << (index & 7)))
+
+
+@nb.njit(inline="always", **NUMBA_OPTIONS)
+def calculate_bitset_size(size: int) -> int:
+    # (x + y - 1) // y
+    # (x + 8 - 1) // 8
+    return (size + 7) // 8
+
+
+@nb.njit(inline="always", **NUMBA_OPTIONS)
+def create_bitset(size: int) -> np.ndarray:
+    bitset_size = calculate_bitset_size(size)
+    return np.zeros(bitset_size, dtype=np.uint8)
+
+
+@nb.njit(**NUMBA_OPTIONS)
+def resize_bitset(bitset: np.ndarray, new_size: int) -> np.ndarray:
+    new_bitset_size = calculate_bitset_size(new_size)
+    new_bitset = np.zeros(new_bitset_size, dtype=np.uint8)
+
+    old_size = bitset.shape[0]
+    new_bitset[:old_size] = bitset
+
+    return new_bitset
 
 
 @nb.njit(**NUMBA_OPTIONS)
@@ -229,6 +258,7 @@ def robust_prune(
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
+    deleted: np.ndarray,  # bitset
 ) -> None:
     """
     Data: Graph G, point p ∈ P , candidate set V,
@@ -271,10 +301,10 @@ def robust_prune(
 
         # equivalent of argmin in the algorithm
         argmin_id = candidates_ids_sorted[i]
-        pstar_id = candidates[argmin_id]
+        pstar_id = int(candidates[argmin_id])
 
         # equivalent of removing pstar from candidates in the algorithm
-        if pstar_id == source_id:
+        if pstar_id == source_id or get_bit(deleted, pstar_id):
             continue
 
         pstar_dist = candidate_source_dists[argmin_id]
@@ -311,6 +341,7 @@ def forward_indexing_pass(
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
+    deleted: np.ndarray,
 ) -> None:
     """
     Exploring the neighbors of the batch nodes
@@ -319,15 +350,11 @@ def forward_indexing_pass(
     batch_size = batch_ids.shape[0]
     vector_count = vectors.shape[0]
 
-    # (x + y - 1) // y
-    # (x + 8 - 1) // 8
-    bitset_size = (vector_count + 7) // 8
-
     for i in nb.prange(batch_size):
         query_id = batch_ids[i]
         query_vector = vectors[query_id]
 
-        seen = np.zeros(bitset_size, dtype=np.uint8)
+        seen = create_bitset(vector_count)
 
         _, _, visited = greedy_search(
             entry_id=entry_point,
@@ -348,6 +375,7 @@ def forward_indexing_pass(
             graph=graph,
             vectors=vectors,
             metric=metric,
+            deleted=deleted,
         )
 
 
@@ -359,6 +387,7 @@ def backward_indexing_pass(
     graph: np.ndarray,
     vectors: np.ndarray,
     metric: int,
+    deleted: np.ndarray,
 ) -> np.ndarray:
     """
     Returns list of vector ids for which the graph was modified
@@ -465,6 +494,7 @@ def backward_indexing_pass(
                 graph=graph,
                 vectors=vectors,
                 metric=metric,
+                deleted=deleted,
             )
 
     modified_count = 0
@@ -482,3 +512,69 @@ def backward_indexing_pass(
             modified_count += 1
 
     return modified
+
+
+@nb.njit(parallel=True, **NUMBA_OPTIONS)
+def delete_pass(
+    alpha: float,
+    R: int,
+    graph: np.ndarray,
+    vectors: np.ndarray,
+    active_count: int,
+    metric: int,
+    deleted: np.ndarray,
+) -> None:
+    for p in nb.prange(active_count):
+        if get_bit(deleted, p):
+            continue
+
+        p_neighbors = graph[p]
+        affected = False
+        for i in range(R):
+            n_id = p_neighbors[i]
+            if n_id == -1:
+                break
+
+            if get_bit(deleted, n_id):
+                affected = True
+                break
+
+        if not affected:
+            continue
+
+        candidates = np.empty(R * (R + 1), dtype=np.int32)
+        candidate_count = 0
+
+        for i in range(R):
+            n_id = p_neighbors[i]
+            if n_id == -1:
+                break
+
+            if get_bit(deleted, n_id):
+                n_neighbors = graph[n_id]
+                for j in range(R):
+                    nn_id = n_neighbors[j]
+                    if nn_id == -1:
+                        break
+
+                    if nn_id != p and not get_bit(deleted, nn_id):
+                        candidates[candidate_count] = nn_id
+                        candidate_count += 1
+            else:
+                candidates[candidate_count] = n_id
+                candidate_count += 1
+
+        for i in range(R):
+            graph[p][i] = -1
+
+        if candidate_count > 0:
+            robust_prune(
+                source_id=p,
+                candidates_ids=candidates[:candidate_count],
+                alpha=alpha,
+                R=R,
+                graph=graph,
+                vectors=vectors,
+                metric=metric,
+                deleted=deleted,
+            )

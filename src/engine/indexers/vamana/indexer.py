@@ -7,8 +7,8 @@ from loguru import logger
 import src.engine.indexers.vamana.ops as operations
 from src.common import MetricType, config
 from src.engine.indexers.vamana.controller import AlphaController
-from src.engine.structures.graph import Graph
-from src.engine.structures.vector_store import VectorStore
+from src.engine.indexers.vamana.graph import Graph
+from src.engine.indexers.vamana.vector_store import VectorStore
 from src.schemas.vector import VectorData
 
 
@@ -141,6 +141,39 @@ class VamanaIndexer:
 
         return query_results
 
+    def delete(self, batch_ids: List[int]):
+        ids_to_delete = [
+            self.vector_store.dbid_to_idx[db_id]
+            for db_id in batch_ids
+            if db_id in self.vector_store.dbid_to_idx
+        ]
+
+        if not ids_to_delete:
+            return
+
+        self.vector_store.delete_batch(batch_ids)
+
+        alpha = self.alpha_controller.get_alpha()
+
+        operations.delete_pass(
+            alpha=alpha,
+            R=self._R,
+            graph=self.graph.graph,
+            vectors=self.vector_store.vectors,
+            active_count=self.vector_store.total_size,
+            metric=self._metric,
+            deleted=self.vector_store.deleted,
+        )
+
+        for idx in ids_to_delete:
+            self.graph.graph[idx][:] = -1
+
+        if self.entry_point in ids_to_delete:
+            if self.vector_store.size > 0:
+                self.entry_point = self._get_medoid()
+            else:
+                self.entry_point = None
+
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -157,7 +190,7 @@ class VamanaIndexer:
             L=L,
             seen=seen,
             graph=self.graph.graph,
-            vectors=self.vector_store.get_vectors(),
+            vectors=self.vector_store.vectors,
             metric=self._metric,
         )
 
@@ -173,8 +206,9 @@ class VamanaIndexer:
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
-            vectors=self.vector_store.get_vectors(),
+            vectors=self.vector_store.vectors,
             metric=self._metric,
+            deleted=self.vector_store.deleted,
         )
 
     def _index_batch(
@@ -187,8 +221,9 @@ class VamanaIndexer:
             L=self._L_build,
             entry_point=self.entry_point,  # type: ignore
             graph=self.graph.graph,
-            vectors=self.vector_store.get_vectors(),
+            vectors=self.vector_store.vectors,
             metric=self._metric,
+            deleted=self.vector_store.deleted,
         )
 
         backward_ids_np = operations.backward_indexing_pass(
@@ -196,8 +231,9 @@ class VamanaIndexer:
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
-            vectors=self.vector_store.get_vectors(),
+            vectors=self.vector_store.vectors,
             metric=self._metric,
+            deleted=self.vector_store.deleted,
         )
 
         if return_mod_ids:
