@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
 
-from sqlalchemy import except_, select
+from sqlalchemy import delete, except_, select
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
@@ -23,19 +23,19 @@ class IndexRepository:
         for source, neighbor in edges:
             graph[source].append(neighbor)
         return graph
-    
+
     def update_graph(self, collection_id: int, subgraph: Dict[int, List[int]]):
         ids = list(subgraph.keys())
         if not ids:
             return
-        
+
         DELETE_BATCH_SIZE = 512
         for i in range(0, len(ids), DELETE_BATCH_SIZE):
             chunk_ids = ids[i : i + DELETE_BATCH_SIZE]
             self.session.execute(
                 models.graph_association_table.delete().where(
-                    (models.graph_association_table.c.collection_id == collection_id) & 
-                    (models.graph_association_table.c.source_id.in_(chunk_ids)) 
+                    (models.graph_association_table.c.collection_id == collection_id)
+                    & (models.graph_association_table.c.source_id.in_(chunk_ids))
                 )
             )
 
@@ -95,7 +95,6 @@ class IndexRepository:
     def get_unindexed_vector_ids(self, collection_id: int) -> List[int]:
         all_vectors_stmt = select(models.Vector.id).where(
             models.Vector.collection_id == collection_id,
-            models.Vector.deleted == False,  # noqa: E712
         )
 
         indexed_vectors_stmt = select(models.graph_association_table.c.source_id).where(
@@ -115,3 +114,11 @@ class IndexRepository:
     def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
         metadata = self.session.get(models.IndexMetadata, (collection_id, key))
         return metadata.value if metadata else None
+
+    def delete_index_metadata(self, collection_id: int, key: str) -> None:
+        stmt = (
+            delete(models.IndexMetadata)
+            .where(models.IndexMetadata.collection_id == collection_id)
+            .where(models.IndexMetadata.key == key)
+        )
+        self.session.execute(stmt)

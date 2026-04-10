@@ -151,13 +151,13 @@ def create_bitset(size: int) -> np.ndarray:
     return np.zeros(bitset_size, dtype=np.uint8)
 
 
-@nb.njit(**NUMBA_OPTIONS)
+@nb.njit(inline="always", **NUMBA_OPTIONS)
 def resize_bitset(bitset: np.ndarray, new_size: int) -> np.ndarray:
-    new_bitset_size = calculate_bitset_size(new_size)
-    new_bitset = np.zeros(new_bitset_size, dtype=np.uint8)
+    new_bitset = create_bitset(new_size)
 
-    old_size = bitset.shape[0]
-    new_bitset[:old_size] = bitset
+    old_size = calculate_bitset_size(bitset.shape[0])
+    for i in range(old_size):
+        set_bit(new_bitset, bitset[i])
 
     return new_bitset
 
@@ -523,7 +523,9 @@ def delete_pass(
     active_count: int,
     metric: int,
     deleted: np.ndarray,
-) -> None:
+) -> np.ndarray:
+    modified_map = np.zeros(active_count, dtype=np.bool_)
+
     for p in nb.prange(active_count):
         if get_bit(deleted, p):
             continue
@@ -578,3 +580,19 @@ def delete_pass(
                 metric=metric,
                 deleted=deleted,
             )
+            modified_map[p] = True
+
+    modified_count = 0
+    for i in range(active_count):
+        if modified_map[i]:
+            modified_count += 1
+
+    modified = np.empty(modified_count, dtype=np.int32)
+    modified_count = 0
+
+    for i in range(active_count):
+        if modified_map[i]:
+            modified[modified_count] = i
+            modified_count += 1
+
+    return modified

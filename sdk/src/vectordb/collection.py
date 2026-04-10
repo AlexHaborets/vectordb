@@ -1,8 +1,9 @@
 from typing import Any, Dict, List, Optional, Sequence
 
+import numpy as np
+
 from vectordb.models import SearchResult, Vector
 from vectordb.transport import Transport
-import numpy as np
 
 
 class Collection:
@@ -48,6 +49,7 @@ class Collection:
     def search(self, query: List[float] | np.ndarray, k: int = 5) -> List[SearchResult]:
         if isinstance(query, np.ndarray):
             query = query.tolist()
+
         payload = {"vector": query, "k": k}
         path = f"/collections/{self.name}/search"
         response = self._transport.post(path=path, json=payload)
@@ -55,7 +57,33 @@ class Collection:
             return []
         return [SearchResult.model_validate(item) for item in response]
 
-    def get(self, vector_id: str) -> Vector:
-        path = f"/collections/{self.name}/vectors/{vector_id}"
-        response = self._transport.get(path=path)
-        return Vector.model_validate(response)
+    def get(self, ids: Sequence[str] | str, batch_size: int = 64) -> List[Vector]:
+        if isinstance(ids, str):
+            ids = [ids]
+
+        path = f"/collections/{self.name}/vectors/batch-get"
+        total = len(ids)
+        vectors: List[Vector] = []
+        for i in range(0, total, batch_size):
+            batch_ids = list(ids[i : i + batch_size])
+            response = self._transport.post(
+                path=path,
+                json={"ids": batch_ids},
+            )
+            if response:
+                vectors.extend([Vector.model_validate(item) for item in response])
+        return vectors
+
+    def delete(self, ids: Sequence[str] | str, batch_size: int = 64) -> bool:
+        if isinstance(ids, str):
+            ids = [ids]
+
+        path = f"/collections/{self.name}/vectors/delete"
+        total = len(ids)
+        for i in range(0, total, batch_size):
+            batch_ids = list(ids[i : i + batch_size])
+            self._transport.post(
+                path=path,
+                json={"ids": batch_ids},
+            )
+        return True

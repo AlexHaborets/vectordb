@@ -141,7 +141,7 @@ class VamanaIndexer:
 
         return query_results
 
-    def delete(self, batch_ids: List[int]):
+    def delete(self, batch_ids: List[int]) -> tuple[List[int], bool]:
         ids_to_delete = [
             self.vector_store.dbid_to_idx[db_id]
             for db_id in batch_ids
@@ -149,13 +149,13 @@ class VamanaIndexer:
         ]
 
         if not ids_to_delete:
-            return
+            return [], False
 
         self.vector_store.delete_batch(batch_ids)
 
         alpha = self.alpha_controller.get_alpha()
 
-        operations.delete_pass(
+        modified_ids_np = operations.delete_pass(
             alpha=alpha,
             R=self._R,
             graph=self.graph.graph,
@@ -168,11 +168,16 @@ class VamanaIndexer:
         for idx in ids_to_delete:
             self.graph.graph[idx][:] = -1
 
+        entry_point_modified = False
         if self.entry_point in ids_to_delete:
+            entry_point_modified = False
             if self.vector_store.size > 0:
                 self.entry_point = self._get_medoid()
             else:
                 self.entry_point = None
+
+        modified_ids = modified_ids_np.tolist()
+        return modified_ids, entry_point_modified
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int

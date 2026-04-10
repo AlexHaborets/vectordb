@@ -43,11 +43,9 @@ class IndexerManager:
         while self._running:
             self._persist_event.wait(timeout=5.0)
             self._persist_event.clear()
-
-            if not self._running:
-                break
-
             self._persist_job()
+
+        self._persist_job()
 
     def _persist_job(self) -> None:
         save_queue_snapshot = {}
@@ -190,15 +188,22 @@ class IndexerManager:
             entry_point=entry_point,
         )
 
-        unindexed_vectors = uow.indexes.get_unindexed_vector_ids(
+        unindexed_db_ids = uow.indexes.get_unindexed_vector_ids(
             collection_id=collection.id
         )
 
         # If there are vectors in db that are not in graph
         # and indexer is not new
-        if unindexed_vectors and entry_point is not None:
+        if unindexed_db_ids and entry_point is not None:
             logger.info(f"Repairing index for {collection_name}")
-            indexer.update(unindexed_vectors)
+
+            unindexed_ids = [
+                vector_store.get_idx(db_id)
+                for db_id in unindexed_db_ids
+                if db_id in vector_store.dbid_to_idx
+            ]
+            if unindexed_ids:
+                indexer.update(unindexed_ids)
 
         return indexer
 
@@ -247,8 +252,35 @@ class IndexerManager:
 
         if full_rebuild:
             self._save_to_db(collection_name, uow)
-        else:
+        elif modified_ids:
             self._enqueue_ids(collection_name, modified_ids)
+
+    def delete(
+        self, collection_name: str, vectors_ids: List[int], uow: UnitOfWork
+    ) -> None:
+        collection = uow.collections.get_collection_by_name(collection_name)
+        if not collection:
+            raise CollectionNotFoundError(collection_name)
+
+        indexer = self.get_indexer(collection_name, uow)
+        with self._indexers_locks[collection_name]:
+            modified_ids, entry_point_modified = indexer.delete(vectors_ids)
+
+            if entry_point_modified and indexer.entry_point is not None:
+                entry_point = indexer.vector_store.get_idx(indexer.entry_point)
+
+                uow.indexes.set_index_metadata(
+                    collection_id=collection.id,
+                    key="entry_point",
+                    value=str(entry_point),
+                )
+            elif indexer.entry_point is None:
+                uow.indexes.delete_index_metadata(
+                    collection_id=collection.id, key="entry_point"
+                )
+
+            if modified_ids:
+                self._enqueue_ids(collection_name, modified_ids)
 
     def search(
         self, collection_name: str, query: Query, uow: UnitOfWork
@@ -267,6 +299,13 @@ class IndexerManager:
                 continue
 
             collection_id = collection.id  # type: ignore
-            if ids := uow.indexes.get_unindexed_vector_ids(collection_id):
-                # TODO: Use collection id directly to avoid unnecessary lookup
-                self._persist_index(collection_name, ids)
+            if unindexed_db_ids := uow.indexes.get_unindexed_vector_ids(collection_id):
+                indexer = self._indexers.get(collection_name)
+                if indexer:
+                    unindexed_idxs = [
+                        indexer.vector_store.get_idx(dbid)
+                        for dbid in unindexed_db_ids
+                        if dbid in indexer.vector_store.dbid_to_idx
+                    ]
+                    if unindexed_idxs:
+                        self._persist_index(collection_name, unindexed_idxs)
