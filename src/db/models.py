@@ -5,7 +5,6 @@ from numpy.typing import NDArray
 from sqlalchemy import (
     BLOB,
     JSON,
-    Boolean,
     Column,
     Enum,
     ForeignKey,
@@ -66,9 +65,6 @@ class Vector(Base):
     )
 
     vector_blob: Mapped[bytes] = mapped_column(BLOB, nullable=False)
-    deleted: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False, index=True
-    )
 
     collection: Mapped["Collection"] = relationship(back_populates="vectors")
 
@@ -79,7 +75,7 @@ class Vector(Base):
         secondaryjoin=(id == graph_association_table.c.neighbor_id),
     )
 
-    vector_metadata: Mapped[Dict] =  mapped_column(JSON, nullable=True)
+    vector_metadata: Mapped[Dict] = mapped_column(JSON, nullable=True)
 
     @property
     def numpy_vector(self) -> NDArray[NUMPY_DTYPE]:
@@ -96,7 +92,6 @@ class Vector(Base):
     @vector.setter
     def vector(self, value: List[float]):
         self.numpy_vector = np.array(value)
-
 
 
 class Collection(Base):

@@ -30,11 +30,11 @@ THESE CAN BE MODIFIED
 """
 
 # Search list size when building the index
-VAMANA_L_BUILD = 120
+VAMANA_L_BUILD = 32
 # Search list size during quering
-VAMANA_L_SEARCH = 150
+VAMANA_L_SEARCH = 32
 
-VAMANA_R = 70
+VAMANA_R = 15
 
 VAMANA_ALPHA_FIRST_PASS = 1.0
 

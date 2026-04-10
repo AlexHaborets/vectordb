@@ -1,6 +1,6 @@
 from .collection import Collection, CollectionCreate
 from .query import Query, SearchResult
-from .vector import Vector, VectorCreate, VectorData, UpsertBatch
+from .vector import DeleteBatch, UpsertBatch, Vector, VectorCreate, VectorData
 
 __all__ = [
     "Query",
@@ -9,6 +9,7 @@ __all__ = [
     "Vector",
     "VectorData",
     "UpsertBatch",
+    "DeleteBatch",
     "CollectionCreate",
     "Collection",
 ]

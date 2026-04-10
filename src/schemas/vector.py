@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.common.config import (
     BATCH_SIZE_LIMIT,
-    NUMPY_DTYPE,
     MAX_ID_LENGTH,
     MAX_META_SIZE,
+    NUMPY_DTYPE,
 )
 
 
@@ -83,5 +83,25 @@ class UpsertBatch(BaseModel):
     def check_batch_integrity(self) -> "UpsertBatch":
         ids = [v.id for v in self.vectors]
         if len(ids) != len(set(ids)):
+            raise ValueError("Batch contains duplicate ids")
+        return self
+
+
+class DeleteBatch(BaseModel):
+    ids: List[str] = Field(min_length=1, max_length=BATCH_SIZE_LIMIT)
+
+    @model_validator(mode="after")
+    def check_batch_integrity(self) -> "DeleteBatch":
+        if len(self.ids) != len(set(self.ids)):
+            raise ValueError("Batch contains duplicate ids")
+        return self
+
+
+class GetBatch(BaseModel):
+    ids: List[str] = Field(min_length=1, max_length=BATCH_SIZE_LIMIT)
+
+    @model_validator(mode="after")
+    def check_batch_integrity(self) -> "GetBatch":
+        if len(self.ids) != len(set(self.ids)):
             raise ValueError("Batch contains duplicate ids")
         return self

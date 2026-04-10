@@ -28,7 +28,7 @@ class VectorStore:
         self.idx_to_dbid: List[int] = []
 
         deleted_size = max(STARTING_SIZE, len(vectors) if vectors else 0)
-        self._deleted = create_bitset(deleted_size)
+        self._deleted: np.ndarray = create_bitset(deleted_size)
         self._free_idxs = []
 
         if vectors and len(vectors) > 0:

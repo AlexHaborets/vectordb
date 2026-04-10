@@ -6,11 +6,12 @@ from src.api.dependencies import get_indexer_manager, get_uow
 from src.db import UnitOfWork
 from src.engine import IndexerManager
 from src.schemas import Query, SearchResult
-from src.services import IndexService
+from src.services import CollectionService
 
 search_router = APIRouter(prefix="/collections/{collection_name}", tags=["search"])
 
-index_service = IndexService()
+collection_service = CollectionService()
+
 
 @search_router.post("/search", response_model=List[SearchResult])
 def search(
@@ -20,10 +21,9 @@ def search(
     indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
 ) -> List[SearchResult]:
     with uow:
-        return index_service.search(
+        return collection_service.search(
             collection_name=collection_name,
             query=q,
             indexer_manager=indexer_manager,
-            uow=uow
+            uow=uow,
         )
-
