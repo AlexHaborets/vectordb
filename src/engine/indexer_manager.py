@@ -156,11 +156,11 @@ class IndexerManager:
         vamana_config = VamanaConfig(
             metric=collection.metric,
             dims=collection.dimension,
-            L_build=config.VAMANA_L_BUILD,
-            L_search=config.VAMANA_L_SEARCH,
+            L=config.VAMANA_L,
             R=config.VAMANA_R,
             alpha_first_pass=config.VAMANA_ALPHA_FIRST_PASS,
             alpha_second_pass=config.VAMANA_ALPHA_SECOND_PASS,
+            target_utilization=config.VAMANA_TARGET_UTILIZATION,
         )
 
         vectors_in_db = uow.vectors.get_all_vectors(collection.id)
@@ -287,7 +287,7 @@ class IndexerManager:
     ) -> List[Tuple[float, int]]:
         indexer = self.get_indexer(collection_name, uow)
         with self._indexers_locks[collection_name]:
-            return indexer.search(query.numpy_vector, query.k)
+            return indexer.search(query.numpy_vector, query.k, query.L_search)
 
     def save_all(self, uow: UnitOfWork) -> None:
         with self._lock:

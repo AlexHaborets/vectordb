@@ -18,8 +18,8 @@ def server() -> Generator[None, Any, None]:
     """
     proc = subprocess.Popen(
         ["uvicorn", "src.main:app", "--port", "8000"],
-        # stdout=subprocess.DEVNULL,
-        # stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         preexec_fn=os.setsid,
     )
 
