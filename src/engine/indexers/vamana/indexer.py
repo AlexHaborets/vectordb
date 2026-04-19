@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
-from loguru import logger
 
 import src.engine.indexers.vamana.ops as operations
 from src.common import MetricType, config
@@ -16,11 +15,29 @@ from src.schemas.vector import VectorData
 class VamanaConfig:
     dims: int
     metric: MetricType
-    L_build: int
-    L_search: int
+    L: int
     R: int
     alpha_first_pass: float
     alpha_second_pass: float
+    target_utilization: float
+
+    def __post_init__(self):
+        if not (0 < self.target_utilization <= 1):
+            raise ValueError(
+                f"Target utilization must be between 0 and 1. Got {self.target_utilization}."
+            )
+        if not (1 <= self.alpha_first_pass < 2):
+            raise ValueError(
+                f"Alpha for first pass must be between 0 and 1. Got {self.alpha_first_pass}."
+            )
+        if not (1 <= self.alpha_second_pass < 2):
+            raise ValueError(
+                f"Alpha for second pass must be between 0 and 1. Got {self.alpha_second_pass}."
+            )
+        if not (self.L >= self.R):
+            raise ValueError(
+                f"Search list size (L) must be larger maximum degree (R). Got L={self.L}, R={self.R}"
+            )
 
 
 class VamanaIndexer:
@@ -37,20 +54,19 @@ class VamanaIndexer:
 
         # Indexing/search parameters
         self._dims: int = config.dims
-        self._L_build: int = config.L_build
-        self._L_search: int = config.L_search
+        self._L: int = config.L
         self._R: int = config.R
         self._metric: int = int(config.metric)
         self._alpha_first_pass = config.alpha_first_pass
         self._alpha_second_pass = config.alpha_second_pass
+        self._target_degree = self._R * config.target_utilization
 
-        target_degree = self._R * 0.85
         k_plant = 0.8 * self._R
         kp = 0.15 / k_plant
         ki = kp / 10.0
 
         self.alpha_controller = AlphaController(
-            target_degree=target_degree,
+            target_degree=self._target_degree,
             kp=kp,
             ki=ki,
             alpha_init=self._alpha_second_pass,
@@ -63,6 +79,8 @@ class VamanaIndexer:
         self._indexing_pass(alpha=self._alpha_first_pass)
 
         self._indexing_pass(alpha=self._alpha_second_pass)
+
+        self.alpha_controller.reset()
 
     def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
         if not vectors:
@@ -93,6 +111,8 @@ class VamanaIndexer:
                 return_mod_ids=True,
             )
 
+            modified_ids = list(set(forward_ids + backward_ids))
+
             if backward_ids:
                 total_edges = sum(
                     np.count_nonzero(self.graph.graph[node_id] != -1)
@@ -101,18 +121,16 @@ class VamanaIndexer:
                 avg_degree = total_edges / len(backward_ids)
 
                 self.alpha_controller.feedback(avg_degree)
-                logger.info(f"alpha={alpha:.4f}, avg_degree={avg_degree:.2f}")
-
-            modified_ids = list(set(forward_ids + backward_ids))
 
             return modified_ids, False
 
-    def search(self, query_vector: np.ndarray, k: int) -> List[Tuple[float, int]]:
+    def search(
+        self, query_vector: np.ndarray, k: int, L_search: Optional[int] = None
+    ) -> List[Tuple[float, int]]:
         if self.entry_point is None:
             return []
 
-        # TODO: In the future use Beam search instead
-        l_search = max(self._L_search, k + 50)
+        l_search = L_search if L_search else max(k * 2, config.MIN_L_SEARCH)
         (
             results,
             dists,
@@ -223,7 +241,7 @@ class VamanaIndexer:
             batch_ids=batch_ids,
             alpha=alpha,
             R=self._R,
-            L=self._L_build,
+            L=self._L,
             entry_point=self.entry_point,  # type: ignore
             graph=self.graph.graph,
             vectors=self.vector_store.vectors,
@@ -250,10 +268,15 @@ class VamanaIndexer:
         sigma = self.vector_store.get_idxs()
         np.random.shuffle(sigma)
 
+        CHUNK_SIZE = 1024
+        for i in range(0, len(sigma), CHUNK_SIZE):
+            chunk = sigma[i : i + CHUNK_SIZE]
+            self._index_batch(batch_ids=chunk, alpha=alpha)
+
         self._index_batch(batch_ids=sigma, alpha=alpha)
 
     def _get_medoid(self) -> int:
-        sample_vectors, ids = self.vector_store.get_random_sample(
+        sample_vectors, sample_ids = self.vector_store.get_random_sample(
             config.INDEX_RND_SAMPLE_SIZE
         )
 
@@ -263,6 +286,6 @@ class VamanaIndexer:
 
         medoid = int(np.argmin(dists))
 
-        medoid_idx = ids[medoid]
+        medoid_idx = sample_ids[medoid]
 
         return medoid_idx

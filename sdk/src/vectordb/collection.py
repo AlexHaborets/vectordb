@@ -46,11 +46,13 @@ class Collection:
 
         return True
 
-    def search(self, query: List[float] | np.ndarray, k: int = 5) -> List[SearchResult]:
+    def search(
+        self, query: List[float] | np.ndarray, k: int = 5, L_search: int = 100
+    ) -> List[SearchResult]:
         if isinstance(query, np.ndarray):
             query = query.tolist()
 
-        payload = {"vector": query, "k": k}
+        payload = {"vector": query, "k": k, "L_search": L_search}
         path = f"/collections/{self.name}/search"
         response = self._transport.post(path=path, json=payload)
         if not response:

@@ -29,18 +29,22 @@ Indexing settings
 THESE CAN BE MODIFIED
 """
 
-# Search list size when building the index
-VAMANA_L_BUILD = 32
-# Search list size during quering
-VAMANA_L_SEARCH = 32
+VAMANA_L = 120
 
-VAMANA_R = 15
+VAMANA_R = 70
 
+VAMANA_TARGET_UTILIZATION: float = 0.85
+
+# NOTE: Optimal alpha is within 1.0 to 2.0
+# The database dynamically adjusts alpha
+# to keep the average degree at VAMANA_TARGET_UTILIZATION * VAMANA_R
 VAMANA_ALPHA_FIRST_PASS = 1.0
 
 VAMANA_ALPHA_SECOND_PASS = 1.2
 
-# NOTE: Optimal alpha is within 1.0 to 2.0
+MAX_L_SEARCH = 1000
+
+MIN_L_SEARCH = 60
 
 # Decimal places to round the similarity score
 # between the query and vectors-results from search

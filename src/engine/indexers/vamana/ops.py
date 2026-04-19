@@ -209,13 +209,6 @@ def greedy_search(
         if candidate_ptr == -1:
             break
 
-        # optimization
-        if (
-            candidate_count == L
-            and candidates_dists[candidate_ptr] > candidates_dists[L - 1]
-        ):
-            break
-
         # pop a node from the candidate queue
         pstar_id = candidates_ids[candidate_ptr]
         candidates_checked[candidate_ptr] = True
