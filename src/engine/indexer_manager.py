@@ -287,7 +287,13 @@ class IndexerManager:
     ) -> List[Tuple[float, int]]:
         indexer = self.get_indexer(collection_name, uow)
         with self._indexers_locks[collection_name]:
-            return indexer.search(query.numpy_vector, query.k, query.L_search)
+            return indexer.search(
+                query.numpy_vector,
+                query.k,
+                query.L_search,
+                query.mmr_lambda,
+                query.mmr_n,
+            )
 
     def save_all(self, uow: UnitOfWork) -> None:
         with self._lock:

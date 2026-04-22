@@ -23,7 +23,7 @@ class VectorCreate(VectorBase):
         min_length=1,
         max_length=MAX_ID_LENGTH,
         pattern=r"^[a-zA-Z0-9_\-]+$",  # URL-safe
-        description="Unique identifier for the vector",
+        description="Unique identifier for the vector.",
     )
 
     vector: List[float] = Field(min_length=1)
@@ -47,7 +47,7 @@ class Vector(VectorBase):
             return v.tolist()
 
         if not all(math.isfinite(x) for x in v):
-            raise ValueError("Vector contains NaN or Inf values")
+            raise ValueError("Vector contains NaN or Inf values.")
 
         return v
 
@@ -83,7 +83,7 @@ class UpsertBatch(BaseModel):
     def check_batch_integrity(self) -> "UpsertBatch":
         ids = [v.id for v in self.vectors]
         if len(ids) != len(set(ids)):
-            raise ValueError("Batch contains duplicate ids")
+            raise ValueError("Batch contains duplicate ids.")
         return self
 
 
@@ -93,7 +93,7 @@ class DeleteBatch(BaseModel):
     @model_validator(mode="after")
     def check_batch_integrity(self) -> "DeleteBatch":
         if len(self.ids) != len(set(self.ids)):
-            raise ValueError("Batch contains duplicate ids")
+            raise ValueError("Batch contains duplicate ids.")
         return self
 
 
@@ -103,5 +103,5 @@ class GetBatch(BaseModel):
     @model_validator(mode="after")
     def check_batch_integrity(self) -> "GetBatch":
         if len(self.ids) != len(set(self.ids)):
-            raise ValueError("Batch contains duplicate ids")
+            raise ValueError("Batch contains duplicate ids.")
         return self

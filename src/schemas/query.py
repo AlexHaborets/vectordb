@@ -11,10 +11,23 @@ from src.schemas.vector import Vector
 
 class Query(BaseModel):
     vector: List[float]
-    k: int
+    k: int = Field(..., description="The final number of vectors to return.")
     L_search: Optional[int] = Field(
         None,
-        description="Search list size. Controls recall vs latency. Must be greater than or equal to k.",
+        description="Search list size. Must be greater than or equal to k.",
+        le=config.MAX_L_SEARCH,
+    )
+
+    # MMR params
+    mmr_n: Optional[int] = Field(
+        None,
+        description="Number of candidates to fetch before MMR reranking. Must be >= k.",
+    )
+    mmr_lambda: Optional[float] = Field(
+        None,
+        description="MMR balance. 1.0 = relevance only, 0.0 = diversity only. Usually 0.5 - 0.7.",
+        ge=0.0,
+        le=1.0,
     )
 
     @computed_field
@@ -29,11 +42,18 @@ class Query(BaseModel):
 
         if self.L_search < self.k:
             raise ValueError(
-                f"L_search ({self.L_search}) cannot be less than k ({self.k})"
+                f"L_search ({self.L_search}) cannot be less than k ({self.k})."
             )
 
-        if self.L_search > config.MAX_L_SEARCH:
-            raise ValueError("L_search cannot exceed 1000")
+        return self
+
+    @model_validator(mode="after")
+    def validate_mmr_n(self) -> "Query":
+        if self.mmr_n is None:
+            return self
+
+        if self.mmr_n < self.k:
+            raise ValueError(f"mmr_n ({self.mmr_n}) cannot be less than k ({self.k}).")
 
         return self
 

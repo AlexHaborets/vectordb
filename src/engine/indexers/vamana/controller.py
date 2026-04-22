@@ -7,7 +7,7 @@ class AlphaController:
         alpha_init: float,
         alpha_min: float = 1.0,
         alpha_max: float = 2.0,
-        deadband: float = 0.5,
+        deadband: float = 0.2,
     ):
         self.target = target_degree
         self.kp = kp
@@ -21,27 +21,32 @@ class AlphaController:
             raise ValueError(f"alpha_init must be in [{alpha_min}, {alpha_max}]")
 
         self.alpha: float = alpha_init
-        self.prev_error: float = 0.0
+        self.integral: float = 0.0
 
     def feedback(self, avg_degree: float) -> None:
-        real_error = self.target - avg_degree
+        error = self.target - avg_degree
 
-        # error = 0.0 if abs(real_error) < self.deadband else real_error
-        error = real_error
+        if abs(error) < self.deadband:
+            error = 0.0
 
-        saturating_high = self.alpha >= self.alpha_max and error > 0
-        saturating_low = self.alpha <= self.alpha_min and error < 0
+        integral = self.integral + error
+        alpha = self.alpha_init + self.kp * error + self.ki * integral
 
-        if not (saturating_high or saturating_low):
-            delta = self.kp * (error - self.prev_error) + self.ki * error
-            self.alpha += delta
-            self.alpha = max(self.alpha_min, min(self.alpha_max, self.alpha))
-
-        self.prev_error = error
+        if alpha > self.alpha_max:
+            self.alpha = self.alpha_max
+            if error < 0:
+                self.integral = integral
+        elif alpha < self.alpha_min:
+            self.alpha = self.alpha_min
+            if error > 0:
+                self.integral = integral
+        else:
+            self.integral = integral
+            self.alpha = alpha
 
     def get_alpha(self) -> float:
         return self.alpha
 
     def reset(self):
         self.alpha = self.alpha_init
-        self.prev_error = 0.0
+        self.integral = 0.0

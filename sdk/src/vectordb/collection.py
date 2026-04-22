@@ -47,12 +47,30 @@ class Collection:
         return True
 
     def search(
-        self, query: List[float] | np.ndarray, k: int = 5, L_search: int = 100
+        self,
+        query: List[float] | np.ndarray,
+        k: int = 5,
+        L_search: int = 100,
+        mmr_lambda: Optional[float] = None,
+        mmr_n: Optional[int] = None,
     ) -> List[SearchResult]:
         if isinstance(query, np.ndarray):
             query = query.tolist()
 
+        if (mmr_n is not None) != (mmr_lambda is not None):
+            raise ValueError(
+                "Both 'mmr_n' and 'mmr_lambda' must be provided together to use MMR."
+            )
+
+        if mmr_n is not None and mmr_n < k:
+            raise ValueError(f"'mmr_n' ({mmr_n}) cannot be less than 'k' ({k}).")
+
         payload = {"vector": query, "k": k, "L_search": L_search}
+
+        if mmr_n is not None and mmr_lambda is not None:
+            payload["mmr_n"] = mmr_n
+            payload["mmr_lambda"] = mmr_lambda
+
         path = f"/collections/{self.name}/search"
         response = self._transport.post(path=path, json=payload)
         if not response:
