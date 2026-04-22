@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 import src.engine.indexers.vamana.ops as operations
+import src.engine.indexers.vamana.reranking as reranking
 from src.common import MetricType, config
 from src.engine.indexers.vamana.controller import AlphaController
 from src.engine.indexers.vamana.graph import Graph
@@ -125,12 +126,19 @@ class VamanaIndexer:
             return modified_ids, False
 
     def search(
-        self, query_vector: np.ndarray, k: int, L_search: Optional[int] = None
+        self,
+        query_vector: np.ndarray,
+        k: int,
+        L_search: Optional[int] = None,
+        mmr_lambda: Optional[float] = None,
+        mmr_n: Optional[int] = None,
     ) -> List[Tuple[float, int]]:
         if self.entry_point is None:
             return []
 
-        l_search = L_search if L_search else max(k * 2, config.MIN_L_SEARCH)
+        use_mmr = mmr_lambda is not None and mmr_n is not None and mmr_n > k
+        search_k = mmr_n if use_mmr else k
+        search_L = L_search or max(k * 2, config.MIN_L_SEARCH)
         (
             results,
             dists,
@@ -138,24 +146,29 @@ class VamanaIndexer:
         ) = self._greedy_search(
             entry_id=self.entry_point,
             query_vector=query_vector,
-            k=k,
-            L=l_search,
+            k=search_k,  # type: ignore
+            L=search_L,
         )
 
         if results.size == 0:
             return []
 
-        if self._metric != MetricType.L2:
-            scores = 1.0 - dists
+        if mmr_lambda is not None:
+            results, scores = reranking.mmr_rerank(
+                query_dists=dists,
+                candidate_ids=results,
+                vectors=self.vector_store.vectors,
+                metric=self._metric,
+                k=k,
+                mmr_lambda=mmr_lambda,
+            )
         else:
-            scores = 1 / (1 + dists)  # type: ignore
+            scores = reranking.dists_to_sims(dists=dists, metric=self._metric)
 
         query_results = [
             (score, self.vector_store.get_dbid(idx))
             for score, idx in zip(scores, results)
         ]
-
-        query_results.sort(key=lambda x: x[0], reverse=True)
 
         return query_results
 
