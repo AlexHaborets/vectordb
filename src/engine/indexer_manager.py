@@ -31,7 +31,7 @@ class IndexerManager:
         self._persist_event = threading.Event()
         self._running = True
 
-        self._worker = threading.Thread(target=self._persist_loop, daemon=True)
+        self._worker = threading.Thread(target=self._persist_loop)
         self._worker.start()
 
     def stop(self) -> None:

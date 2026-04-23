@@ -11,6 +11,7 @@ Designed for educational purposes and lightweight use cases, including semantic 
 
 - **Vamana Graph Indexing:** Utilizes the algorithm behind **[DiskANN](https://proceedings.neurips.cc/paper/2019/file/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Paper.pdf)**. 
 - **Index Auto-Tuning:** Implements adaptive tuning of the parameter alpha to stabilize average graph degree via a custom PI controller, fitting to different dataset structure and improving recall without sacrificing latency.
+- **Built-in Reranking:** Natively supports [MMR (Maximal Marginal Relevance)](https://www.cs.cmu.edu/~jgc/publication/The_Use_MMR_Diversity_Based_LTMIR_1998.pdf) reranking out of the box, guaranteeing varied and contextually rich context for RAG applications.
 - **C-Level Speed:** By leveraging **[Numba](https://numba.pydata.org/)** JIT compilation, TrovaDB achieves indexing and search performance comparable to C while maintaining a readable, hackable Python codebase.
 - **Persistence:** The full database is stored reliably in a single SQLite file ensuring portability and crash-safety.
 - **Data Science Ready SDK:** A lightweight Python client designed with native NumPy support and simple interface.
