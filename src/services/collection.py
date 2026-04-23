@@ -1,7 +1,6 @@
 from typing import Dict, List
 
 import numpy as np
-from sklearn.preprocessing import normalize
 
 from src.common import MetricType, VectorNotFoundError, config
 from src.common.exceptions import (
@@ -97,7 +96,7 @@ class CollectionService:
         # Normalize vectors is the collection metric is cosine
         if collection.metric == MetricType.COSINE:
             matrix = np.array([v.vector for v in vectors])
-            normalized_vectors = normalize(matrix, norm="l2")
+            normalized_vectors = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
             for i in range(len(vectors)):
                 vectors[i].vector = normalized_vectors[i].tolist()  # type: ignore
 

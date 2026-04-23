@@ -6,7 +6,6 @@ from src.common.config import NUMPY_DTYPE
 NUMBA_OPTIONS = {
     "fastmath": True,
     "cache": True,
-    "boundscheck": True,
 }
 
 
@@ -155,9 +154,9 @@ def create_bitset(size: int) -> np.ndarray:
 def resize_bitset(bitset: np.ndarray, new_size: int) -> np.ndarray:
     new_bitset = create_bitset(new_size)
 
-    old_size = calculate_bitset_size(bitset.shape[0])
-    for i in range(old_size):
-        set_bit(new_bitset, bitset[i])
+    old_byte_count = bitset.shape[0]
+    for i in range(old_byte_count):
+        new_bitset[i] = bitset[i]
 
     return new_bitset
 

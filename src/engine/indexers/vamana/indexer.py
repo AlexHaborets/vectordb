@@ -29,7 +29,7 @@ class VamanaConfig:
             )
         if not (1 <= self.alpha_first_pass < 2):
             raise ValueError(
-                f"Alpha for first pass must be between 0 and 1. Got {self.alpha_first_pass}."
+                f"Alpha for first pass must be between 1 and 2. Got {self.alpha_first_pass}."
             )
         if not (1 <= self.alpha_second_pass < 2):
             raise ValueError(
@@ -139,6 +139,11 @@ class VamanaIndexer:
         use_mmr = mmr_lambda is not None and mmr_n is not None and mmr_n > k
         search_k = mmr_n if use_mmr else k
         search_L = L_search or max(k * 2, config.MIN_L_SEARCH)
+
+        # normalize if using cosine similiarity
+        if self._metric == int(MetricType.COSINE):
+            query_vector = query_vector / np.linalg.norm(query_vector)
+
         (
             results,
             dists,
@@ -172,7 +177,7 @@ class VamanaIndexer:
 
         return query_results
 
-    def delete(self, batch_ids: List[int]) -> tuple[List[int], bool]:
+    def delete(self, batch_ids: List[int]) -> Tuple[List[int], bool]:
         ids_to_delete = [
             self.vector_store.dbid_to_idx[db_id]
             for db_id in batch_ids
@@ -201,7 +206,7 @@ class VamanaIndexer:
 
         entry_point_modified = False
         if self.entry_point in ids_to_delete:
-            entry_point_modified = False
+            entry_point_modified = True
             if self.vector_store.size > 0:
                 self.entry_point = self._get_medoid()
             else:
@@ -249,7 +254,7 @@ class VamanaIndexer:
 
     def _index_batch(
         self, batch_ids: np.ndarray, alpha: float, return_mod_ids: bool = False
-    ) -> tuple[List[int], List[int]]:
+    ) -> Tuple[List[int], List[int]]:
         operations.forward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
@@ -286,19 +291,23 @@ class VamanaIndexer:
             chunk = sigma[i : i + CHUNK_SIZE]
             self._index_batch(batch_ids=chunk, alpha=alpha)
 
-        self._index_batch(batch_ids=sigma, alpha=alpha)
-
     def _get_medoid(self) -> int:
         sample_vectors, sample_ids = self.vector_store.get_random_sample(
             config.INDEX_RND_SAMPLE_SIZE
         )
 
-        centroid = np.mean(sample_vectors, axis=0)
-
-        dists = np.linalg.norm(sample_vectors - centroid, axis=1)
+        if self._metric == int(MetricType.COSINE):
+            normed = sample_vectors / np.linalg.norm(
+                sample_vectors, axis=1, keepdims=True
+            )
+            centroid = np.mean(normed, axis=0)
+            centroid = centroid / np.linalg.norm(centroid)
+            dists = 1 - normed @ centroid
+        else:
+            centroid = np.mean(sample_vectors, axis=0)
+            dists = np.linalg.norm(sample_vectors - centroid, axis=1)
 
         medoid = int(np.argmin(dists))
-
         medoid_idx = sample_ids[medoid]
 
         return medoid_idx
