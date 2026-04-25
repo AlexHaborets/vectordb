@@ -8,7 +8,9 @@ from typing import Any, Generator
 import pytest
 from vectordb import Client, Collection
 
-BASE_URL = "http://localhost:8000"
+PORT = 8000
+
+BASE_URL = f"http://localhost:{PORT}"
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -17,7 +19,7 @@ def server() -> Generator[None, Any, None]:
     Starts the server in a separate process to ensure accurate benchmarks.
     """
     proc = subprocess.Popen(
-        ["uvicorn", "src.main:app", "--port", "8000"],
+        ["uvicorn", "src.main:app", "--port", str(PORT)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         preexec_fn=os.setsid,
@@ -27,7 +29,7 @@ def server() -> Generator[None, Any, None]:
     start_time = time.time()
     while time.time() - start_time < 5:
         try:
-            with socket.create_connection(("127.0.0.1", 8000), timeout=0.1):
+            with socket.create_connection(("127.0.0.1", str(PORT)), timeout=0.1):
                 break
         except (OSError, ConnectionRefusedError):
             time.sleep(0.1)
