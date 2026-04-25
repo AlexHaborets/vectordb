@@ -7,7 +7,7 @@ Designed for educational purposes and lightweight use cases, including semantic 
 
 ## Key Features
 
-> *Note: This project is work in progress. APIs and features are subject to change.
+> Note: This project is work in progress. APIs and features are subject to change.
 
 - **Vamana Graph Indexing:** Utilizes the algorithm behind **[DiskANN](https://proceedings.neurips.cc/paper/2019/file/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Paper.pdf)**. 
 - **Index Auto-Tuning:** Implements adaptive tuning of the parameter alpha to stabilize average graph degree via a custom PI controller, fitting to different dataset structure and improving recall without sacrificing latency.
