@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
@@ -39,14 +39,6 @@ class CollectionRepository:
         return new_collection
 
     def delete_collection(self, collection_id: int) -> None:
-        self.session.execute(text("PRAGMA foreign_keys = OFF"))
-
-        self.session.execute(
-            delete(models.graph_association_table).where(
-                models.graph_association_table.c.collection_id == collection_id
-            )
-        )
-
         self.session.execute(
             delete(models.Vector).where(models.Vector.collection_id == collection_id)
         )
@@ -60,12 +52,3 @@ class CollectionRepository:
         self.session.execute(
             delete(models.Collection).where(models.Collection.id == collection_id)
         )
-
-    def set_index_metadata(self, collection_id: int, key: str, value: str) -> None:
-        self.session.merge(
-            models.IndexMetadata(collection_id=collection_id, key=key, value=value)
-        )
-
-    def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
-        metadata = self.session.get(models.IndexMetadata, (collection_id, key))
-        return metadata.value if metadata else None
