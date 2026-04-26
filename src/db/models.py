@@ -1,16 +1,14 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
 from sqlalchemy import (
     BLOB,
     JSON,
-    Column,
     Enum,
     ForeignKey,
     Integer,
     String,
-    Table,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -21,31 +19,6 @@ from src.common.metrics import MetricType
 
 class Base(DeclarativeBase):
     pass
-
-
-graph_association_table = Table(
-    "graph",
-    Base.metadata,
-    Column(
-        "source_id",
-        Integer,
-        ForeignKey("vectors.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column(
-        "neighbor_id",
-        Integer,
-        ForeignKey("vectors.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column(
-        "collection_id",
-        Integer,
-        ForeignKey("collections.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    ),
-)
 
 
 class Vector(Base):
@@ -67,13 +40,6 @@ class Vector(Base):
     vector_blob: Mapped[bytes] = mapped_column(BLOB, nullable=False)
 
     collection: Mapped["Collection"] = relationship(back_populates="vectors")
-
-    neighbors: Mapped[List["Vector"]] = relationship(
-        "Vector",
-        secondary=graph_association_table,
-        primaryjoin=(id == graph_association_table.c.source_id),
-        secondaryjoin=(id == graph_association_table.c.neighbor_id),
-    )
 
     vector_metadata: Mapped[Dict] = mapped_column(JSON, nullable=True)
 
@@ -112,6 +78,13 @@ class Collection(Base):
         "IndexMetadata", back_populates="collection", cascade="all, delete-orphan"
     )
 
+    index_snapshot: Mapped[Optional["IndexSnapshot"]] = relationship(
+        "IndexSnapshot",
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
 
 class IndexMetadata(Base):
     # A helper key-value store
@@ -126,4 +99,20 @@ class IndexMetadata(Base):
 
     collection: Mapped["Collection"] = relationship(
         "Collection", back_populates="index_metadata"
+    )
+
+
+class IndexSnapshot(Base):
+    __tablename__ = "index_snapshots"
+
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_point_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    payload: Mapped[bytes] = mapped_column(BLOB, nullable=False)
+
+    collection: Mapped["Collection"] = relationship(
+        "Collection", back_populates="index_snapshot"
     )

@@ -1,11 +1,10 @@
 import copy
+import pickle
 import threading
 import time
-from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
 
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
@@ -23,10 +22,8 @@ class IndexerManager:
         self._indexers_locks: Dict[str, threading.RLock] = {}
         self._lock = threading.RLock()
 
-        self._save_queue = defaultdict(set)
+        self._save_queue: Set[str] = set()
         self._save_queue_lock = threading.RLock()
-
-        self.PERSIST_SIZE = 5000
 
         self._persist_event = threading.Event()
         self._running = True
@@ -48,74 +45,57 @@ class IndexerManager:
         self._persist_job()
 
     def _persist_job(self) -> None:
-        save_queue_snapshot = {}
         with self._save_queue_lock:
             if not self._save_queue:
                 return
-
-            save_queue_snapshot = copy.deepcopy(self._save_queue)
+            save_queue_snapshot = list(self._save_queue)
             self._save_queue.clear()
 
-        for collection_name, ids in save_queue_snapshot.items():
-            ids_list = list(ids)
+        for collection_name in save_queue_snapshot:
+            try:
+                uow = DBUnitOfWork(session_manager.get_session_factory())
+                with uow:
+                    self._persist_index(collection_name, uow)
+                time.sleep(0.05)
+            except Exception as e:
+                logger.error(f"Failed to persist index for {collection_name}: {e}")
+                self._enqueue_collection(collection_name)
 
-            BATCH_SIZE = 500
-            for i in range(0, len(ids_list), BATCH_SIZE):
-                chunk = ids_list[i : i + BATCH_SIZE]
-                try:
-                    self._persist_index(collection_name, chunk)
-
-                    time.sleep(0.05)
-                except Exception as e:
-                    logger.error(f"Failed to persist index for {collection_name}: {e}")
-
-                    with self._save_queue_lock:
-                        self._save_queue[collection_name].update(chunk)
-
-    def _enqueue_ids(self, collection_name: str, ids: List[int]) -> None:
+    def _enqueue_collection(self, collection_name: str) -> None:
         with self._save_queue_lock:
-            self._save_queue[collection_name].update(ids)
+            self._save_queue.add(collection_name)
 
-            curr_size = len(self._save_queue[collection_name])
-
-            if curr_size >= self.PERSIST_SIZE:
-                self._persist_event.set()
-
-    def _persist_index(self, collection_name: str, ids: List[int]) -> None:
-        subgraph = None
-
-        indexer_lock = None
-        with self._lock:
-            if collection_name in self._indexers_locks:
-                indexer_lock = self._indexers_locks[collection_name]
-
-        if not indexer_lock:
+    def _persist_index(self, collection_name: str, uow: UnitOfWork) -> None:
+        snapshot = self._capture_snapshot(collection_name)
+        if not snapshot:
             return
+
+        collection = uow.collections.get_collection_by_name(collection_name)
+        if not collection:
+            return
+
+        logger.info(f"Saving {collection_name} index snapshot...")
+        version = uow.indexes.get_version(collection.id)
+        
+        uow.indexes.save_snapshot(
+            collection_id=collection.id,
+            version=version,
+            entry_point_id=inde,
+            graph=snapshot,
+        )
+
+    def _capture_snapshot(self, collection_name: str) -> Optional[Dict[int, List[int]]]:
+        with self._lock:
+            if collection_name not in self._indexers_locks:
+                return None
+            indexer_lock = self._indexers_locks[collection_name]
 
         with indexer_lock:
             if collection_name not in self._indexers:
-                return
+                return None
 
             indexer = self._indexers[collection_name]
-
-            subgraph = indexer.graph.get_subgraph(
-                ids=ids, idx_to_dbid=indexer.vector_store.idx_to_dbid
-            )
-
-        if subgraph:
-            try:
-                uow = DBUnitOfWork(session_manager.get_session_factory())
-
-                with uow:
-                    collection = uow.collections.get_collection_by_name(collection_name)
-
-                    logger.info(f"Updating {collection_name} index in db...")
-                    uow.indexes.update_graph(
-                        collection_id=collection.id,  # type: ignore
-                        subgraph=subgraph,
-                    )
-            except IntegrityError:
-                return
+            return indexer.graph.to_db_graph(indexer.vector_store.idx_to_dbid)
 
     def get_indexer(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         with self._lock:
@@ -146,7 +126,7 @@ class IndexerManager:
         # Clean the queue
         with self._save_queue_lock:
             if collection_name in self._save_queue:
-                del self._save_queue[collection_name]
+                self._save_queue.discard(collection_name)
 
     def _load_from_db(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)
@@ -167,16 +147,17 @@ class IndexerManager:
         vectors = [VectorData.model_validate(v) for v in vectors_in_db]
         vector_store = VectorStore(dims=collection.dimension, vectors=vectors)
 
-        entry_point_in_db = uow.indexes.get_index_metadata(
-            collection_id=collection.id, key="entry_point"
-        )
-        entry_point = (
-            vector_store.get_idx(int(entry_point_in_db)) if entry_point_in_db else None
-        )
+        snapshot = uow.indexes.get_snapshot(collection_id=collection.id)
+        if not snapshot:
+            raise ValueError("oh no")
 
-        graph_in_db = uow.indexes.get_graph(collection_id=collection.id)
+        try:
+            db_graph = pickle.loads(snapshot.payload)
+        except (OSError, pickle.PickleError):
+            raise ValueError("oh no")
+
         graph = Graph.from_db(
-            db_graph=graph_in_db,
+            db_graph=db_graph,
             degree=vamana_config.R,
             dbid_to_idx=vector_store.dbid_to_idx,
         )
@@ -185,7 +166,7 @@ class IndexerManager:
             config=vamana_config,
             vector_store=vector_store,
             graph=graph,
-            entry_point=entry_point,
+            entry_point=snapshot.entry_point_id or None,
         )
 
         unindexed_db_ids = uow.indexes.get_unindexed_vector_ids(
@@ -207,53 +188,14 @@ class IndexerManager:
 
         return indexer
 
-    def _save_to_db(self, collection_name: str, uow: UnitOfWork) -> None:
-        logger.info("Saving full index to db")
-        if collection_name not in self._indexers:
-            return
-
-        graph = None
-        entry_point = None
-        with self._lock:
-            indexer = self._indexers[collection_name]
-            graph = indexer.graph.to_db_graph(
-                idx_to_dbid=indexer.vector_store.idx_to_dbid
-            )
-            if indexer.entry_point is not None:
-                entry_point = indexer.vector_store.get_dbid(indexer.entry_point)
-
-        if not graph:
-            return
-
-        collection = uow.collections.get_collection_by_name(collection_name)
-
-        if not collection:
-            raise CollectionNotFoundError(collection_name)
-
-        uow.indexes.save_graph(collection_id=collection.id, graph=graph)
-
-        if entry_point is not None:
-            uow.indexes.set_index_metadata(
-                collection_id=collection.id,
-                key="entry_point",
-                value=str(entry_point),
-            )
-
     def update(
         self, collection_name: str, vectors: List[Vector], uow: UnitOfWork
     ) -> None:
         indexer = self.get_indexer(collection_name, uow)
-        modified_ids: List[int]
-        full_rebuild: bool
         with self._indexers_locks[collection_name]:
-            modified_ids, full_rebuild = indexer.update(
-                vectors=[VectorData.from_vector(v) for v in vectors]
-            )
+            indexer.update(vectors=[VectorData.from_vector(v) for v in vectors])
 
-        if full_rebuild:
-            self._save_to_db(collection_name, uow)
-        elif modified_ids:
-            self._enqueue_ids(collection_name, modified_ids)
+        self._enqueue_collection(collection_name)
 
     def delete(
         self, collection_name: str, vectors_ids: List[int], uow: UnitOfWork
@@ -264,23 +206,9 @@ class IndexerManager:
 
         indexer = self.get_indexer(collection_name, uow)
         with self._indexers_locks[collection_name]:
-            modified_ids, entry_point_modified = indexer.delete(vectors_ids)
+            indexer.delete(vectors_ids)
 
-            if entry_point_modified and indexer.entry_point is not None:
-                entry_point = indexer.vector_store.get_idx(indexer.entry_point)
-
-                uow.indexes.set_index_metadata(
-                    collection_id=collection.id,
-                    key="entry_point",
-                    value=str(entry_point),
-                )
-            elif indexer.entry_point is None:
-                uow.indexes.delete_index_metadata(
-                    collection_id=collection.id, key="entry_point"
-                )
-
-            if modified_ids:
-                self._enqueue_ids(collection_name, modified_ids)
+            self._enqueue_collection(collection_name)
 
     def search(
         self, collection_name: str, query: Query, uow: UnitOfWork

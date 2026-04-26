@@ -1,7 +1,8 @@
-from collections import defaultdict
+import pickle
 from typing import Dict, List, Optional
 
-from sqlalchemy import delete, except_, select
+from sqlalchemy import Integer, String, cast, delete
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm.session import Session
 
 import src.db.models as models
@@ -11,114 +12,67 @@ class IndexRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_graph(self, collection_id: int) -> Dict[int, List[int]]:
-        edges = self.session.execute(
-            select(
-                models.graph_association_table.c.source_id,
-                models.graph_association_table.c.neighbor_id,
-            ).where(models.graph_association_table.c.collection_id == collection_id)
-        ).all()
-
-        graph = defaultdict(list)
-        for source, neighbor in edges:
-            graph[source].append(neighbor)
-        return graph
-
-    def update_graph(self, collection_id: int, subgraph: Dict[int, List[int]]):
-        ids = list(subgraph.keys())
-        if not ids:
-            return
-
-        DELETE_BATCH_SIZE = 512
-        for i in range(0, len(ids), DELETE_BATCH_SIZE):
-            chunk_ids = ids[i : i + DELETE_BATCH_SIZE]
-            self.session.execute(
-                models.graph_association_table.delete().where(
-                    (models.graph_association_table.c.collection_id == collection_id)
-                    & (models.graph_association_table.c.source_id.in_(chunk_ids))
-                )
-            )
-
-        INSERT_BATCH_SIZE = 4096
-        data = []
-        for src, neighbors in subgraph.items():
-            for neighbor in neighbors:
-                data.append(
-                    {
-                        "source_id": src,
-                        "neighbor_id": neighbor,
-                        "collection_id": collection_id,
-                    }
-                )
-                if len(data) >= INSERT_BATCH_SIZE:
-                    self.session.execute(models.graph_association_table.insert(), data)
-                    data = []
-
-        if data:
-            self.session.execute(models.graph_association_table.insert(), data)
-
-    def save_graph(
-        self,
-        collection_id: int,
-        graph: Dict[int, List[int]],
-    ) -> None:
-        self.session.execute(
-            models.graph_association_table.delete().where(
-                models.graph_association_table.c.collection_id == collection_id
-            )
+    def bump_version(self, collection_id: int) -> int:
+        stmt = insert(models.IndexMetadata).values(
+            collection_id=collection_id,
+            key="vector_version",
+            value="1",
         )
 
-        if not graph:
-            return
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["collection_id", "key"],
+            set_={"value": cast(cast(models.IndexMetadata.value, Integer) + 1, String)},
+        ).returning(models.IndexMetadata.value)
 
-        BATCH_SIZE = 4096
+        return int(self.session.execute(stmt).scalar_one())
 
-        batch = []
+    def get_version(self, collection_id: int) -> int:
+        value = self.get_index_metadata(collection_id, "version")
+        return int(value) if value is not None else 0
 
-        for src, neighbors in graph.items():
-            for neighbor in neighbors:
-                batch.append(
-                    {
-                        "source_id": src,
-                        "neighbor_id": neighbor,
-                        "collection_id": collection_id,
-                    }
-                )
-
-                if len(batch) >= BATCH_SIZE:
-                    self.session.execute(models.graph_association_table.insert(), batch)
-                    batch = []
-
-        if batch:
-            self.session.execute(models.graph_association_table.insert(), batch)
-
-    def get_unindexed_vector_ids(self, collection_id: int) -> List[int]:
-        all_vectors_stmt = select(models.Vector.id).where(
-            models.Vector.collection_id == collection_id,
-        )
-
-        indexed_vectors_stmt = select(models.graph_association_table.c.source_id).where(
-            models.graph_association_table.c.collection_id == collection_id
-        )
-
-        stmt = except_(all_vectors_stmt, indexed_vectors_stmt)
-
-        result = self.session.execute(stmt)
-        return list(result.scalars().all())
+    def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
+        metadata = self.session.get(models.IndexMetadata, (collection_id, key))
+        return metadata.value if metadata else None
 
     def set_index_metadata(self, collection_id: int, key: str, value: str) -> None:
         self.session.merge(
             models.IndexMetadata(collection_id=collection_id, key=key, value=value)
         )
 
-    def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
-        metadata = self.session.get(models.IndexMetadata, (collection_id, key))
-        return metadata.value if metadata else None
-
     def delete_index_metadata(self, collection_id: int, key: str) -> None:
         stmt = (
             delete(models.IndexMetadata)
             .where(models.IndexMetadata.collection_id == collection_id)
             .where(models.IndexMetadata.key == key)
+        )
+        self.session.execute(stmt)
+
+    def save_snapshot(
+        self,
+        collection_id: int,
+        version: int,
+        entry_point_id: Optional[int],
+        graph: Dict[int, List[int]],
+    ) -> None:
+        payload = pickle.dumps(
+            graph,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+
+        self.session.merge(
+            models.IndexSnapshot(
+                collection_id=collection_id,
+                version=version,
+                entry_point_id=entry_point_id,
+                payload=payload,
+            )
+        )
+
+    def get_snapshot(self, collection_id: int) -> Optional[models.IndexSnapshot]:
+        return self.session.get(models.IndexSnapshot, collection_id)
+
+    def delete_snapshot(self, collection_id: int) -> None:
+        stmt = delete(models.IndexSnapshot).where(
+            models.IndexSnapshot.collection_id == collection_id
         )
         self.session.execute(stmt)
