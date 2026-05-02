@@ -3,10 +3,12 @@ import signal
 import socket
 import subprocess
 import time
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import pytest
-from vectordb import Client, Collection
+
+from trovadb.client import Client, Collection
 
 PORT = 8000
 
@@ -19,7 +21,7 @@ def server() -> Generator[None, Any, None]:
     Starts the server in a separate process to ensure accurate benchmarks.
     """
     proc = subprocess.Popen(
-        ["uvicorn", "src.main:app", "--port", str(PORT)],
+        ["uvicorn", "trovadb.server.main:app", "--port", str(PORT)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         preexec_fn=os.setsid,

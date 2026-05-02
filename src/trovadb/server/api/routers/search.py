@@ -1,0 +1,29 @@
+from typing import Annotated, List
+
+from fastapi import APIRouter, Depends
+
+from trovadb.server.api.dependencies import get_indexer_manager, get_uow
+from trovadb.server.db import UnitOfWork
+from trovadb.server.engine import IndexerManager
+from trovadb.server.schemas import Query, SearchResult
+from trovadb.server.services import CollectionService
+
+search_router = APIRouter(prefix="/collections/{collection_name}", tags=["search"])
+
+collection_service = CollectionService()
+
+
+@search_router.post("/search", response_model=List[SearchResult])
+def search(
+    collection_name: str,
+    q: Query,
+    uow: Annotated[UnitOfWork, Depends(get_uow)],
+    indexer_manager: Annotated[IndexerManager, Depends(get_indexer_manager)],
+) -> List[SearchResult]:
+    with uow:
+        return collection_service.search(
+            collection_name=collection_name,
+            query=q,
+            indexer_manager=indexer_manager,
+            uow=uow,
+        )
