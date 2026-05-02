@@ -110,7 +110,7 @@ class IndexSnapshot(Base):
     )
 
     version: Mapped[int] = mapped_column(Integer, nullable=False)
-    entry_point_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    entry_point_id: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[bytes] = mapped_column(BLOB, nullable=False)
 
     collection: Mapped["Collection"] = relationship(

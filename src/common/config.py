@@ -52,6 +52,9 @@ SIMILARITY_SCORE_PRECISION = 4
 
 NUMPY_DTYPE = np.float32
 
+# Saves updated indexes to disk every 5 seconds
+PERSIST_PERIOD = 5  # seconds
+
 """
 API settings
 """

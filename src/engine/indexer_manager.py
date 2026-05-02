@@ -1,18 +1,18 @@
-import copy
-import pickle
 import threading
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+import numpy as np
 from loguru import logger
 
 import src.common.config as config
 from src.common.exceptions import CollectionNotFoundError
 from src.db import UnitOfWork, session_manager
 from src.db.uow import DBUnitOfWork
-from src.engine import VamanaConfig, VamanaIndexer
 from src.engine.indexers.vamana.graph import Graph
+from src.engine.indexers.vamana.indexer import VamanaConfig, VamanaIndexer
 from src.engine.indexers.vamana.vector_store import VectorStore
+from src.engine.snapshot import IndexSnapshot, pack_snapshot, unpack_snapshot
 from src.schemas import Query, Vector, VectorData
 
 
@@ -38,7 +38,7 @@ class IndexerManager:
 
     def _persist_loop(self) -> None:
         while self._running:
-            self._persist_event.wait(timeout=5.0)
+            self._persist_event.wait(timeout=config.PERSIST_PERIOD)
             self._persist_event.clear()
             self._persist_job()
 
@@ -66,25 +66,28 @@ class IndexerManager:
             self._save_queue.add(collection_name)
 
     def _persist_index(self, collection_name: str, uow: UnitOfWork) -> None:
-        snapshot = self._capture_snapshot(collection_name)
-        if not snapshot:
-            return
+        logger.info(f"Saving {collection_name} index snapshot...")
 
         collection = uow.collections.get_collection_by_name(collection_name)
         if not collection:
             return
 
-        logger.info(f"Saving {collection_name} index snapshot...")
+        snapshot = self._capture_snapshot(collection_name)
+        if not snapshot:
+            return
+
+        payload = pack_snapshot(snapshot)
+
         version = uow.indexes.get_version(collection.id)
-        
+
         uow.indexes.save_snapshot(
             collection_id=collection.id,
             version=version,
-            entry_point_id=inde,
-            graph=snapshot,
+            entry_point_id=snapshot.entry_point,
+            payload=payload,
         )
 
-    def _capture_snapshot(self, collection_name: str) -> Optional[Dict[int, List[int]]]:
+    def _capture_snapshot(self, collection_name: str) -> Optional[IndexSnapshot]:
         with self._lock:
             if collection_name not in self._indexers_locks:
                 return None
@@ -95,7 +98,7 @@ class IndexerManager:
                 return None
 
             indexer = self._indexers[collection_name]
-            return indexer.graph.to_db_graph(indexer.vector_store.idx_to_dbid)
+            return indexer.get_snapshot()
 
     def get_indexer(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         with self._lock:
@@ -128,6 +131,74 @@ class IndexerManager:
             if collection_name in self._save_queue:
                 self._save_queue.discard(collection_name)
 
+    def _restore_indexer(
+        self,
+        snapshot: IndexSnapshot,
+        vectors_in_db,
+        vamana_config: VamanaConfig,
+    ):
+        dbid_to_vec = {v.id: VectorData.model_validate(v) for v in vectors_in_db}
+        vectors = [dbid_to_vec[int(dbid)] for dbid in snapshot.id_map]
+        vector_store = VectorStore(dims=vamana_config.dims, vectors=vectors)
+        graph = Graph.from_snapshot(snapshot.graph, degree=vamana_config.R)
+
+        return VamanaIndexer(
+            config=vamana_config,
+            vector_store=vector_store,
+            graph=graph,
+            entry_point=snapshot.entry_point,
+        )
+
+    def _repair_indexer(
+        self,
+        snapshot: IndexSnapshot,
+        vectors_in_db,
+        vamana_config: VamanaConfig,
+    ) -> VamanaIndexer:
+        graph = snapshot.graph
+        id_map = snapshot.id_map
+        entry_point = snapshot.entry_point
+
+        dbid_to_vec = {v.id: VectorData.model_validate(v) for v in vectors_in_db}
+        db_ids = set(dbid_to_vec.keys())
+        snapshot_ids = set(snapshot.id_map.tolist())
+
+        orphaned = snapshot_ids - db_ids
+        unindexed_ids = db_ids - snapshot_ids
+
+        # First pass: remove orphaned vectors
+        if orphaned:
+            keep = np.array([int(dbid) in db_ids for dbid in id_map])
+            valid_indices = np.where(keep)[0].astype(np.int32)
+
+            remap = np.full(len(id_map), -1, dtype=np.int32)
+            remap[valid_indices] = np.arange(len(valid_indices), dtype=np.int32)
+
+            graph = graph[valid_indices].copy()
+            valid_edges = graph != -1
+            graph[valid_edges] = remap[graph[valid_edges]]
+
+            id_map = id_map[valid_indices]
+            entry_point = int(remap[entry_point]) if remap[entry_point] != -1 else None
+
+        vectors = [dbid_to_vec[int(dbid)] for dbid in id_map]
+        vector_store = VectorStore(dims=vamana_config.dims, vectors=vectors)
+
+        graph = Graph.from_snapshot(graph, degree=vamana_config.R)
+
+        indexer = VamanaIndexer(
+            config=vamana_config,
+            vector_store=vector_store,
+            graph=graph,
+            entry_point=entry_point,
+        )
+
+        # Second pass
+        if unindexed_ids:
+            indexer.update([dbid_to_vec[dbid] for dbid in unindexed_ids])
+
+        return indexer
+
     def _load_from_db(self, collection_name: str, uow: UnitOfWork) -> VamanaIndexer:
         collection = uow.collections.get_collection_by_name(collection_name)
         if not collection:
@@ -144,49 +215,26 @@ class IndexerManager:
         )
 
         vectors_in_db = uow.vectors.get_all_vectors(collection.id)
-        vectors = [VectorData.model_validate(v) for v in vectors_in_db]
-        vector_store = VectorStore(dims=collection.dimension, vectors=vectors)
 
-        snapshot = uow.indexes.get_snapshot(collection_id=collection.id)
-        if not snapshot:
-            raise ValueError("oh no")
+        db_snapshot = uow.indexes.get_snapshot(collection_id=collection.id)
+        if not db_snapshot:
+            vectors = [VectorData.model_validate(v) for v in vectors_in_db]
+            vector_store = VectorStore(dims=vamana_config.dims, vectors=vectors)
+            return VamanaIndexer(config=vamana_config, vector_store=vector_store)
 
-        try:
-            db_graph = pickle.loads(snapshot.payload)
-        except (OSError, pickle.PickleError):
-            raise ValueError("oh no")
+        snapshot = unpack_snapshot(db_snapshot.payload, db_snapshot.entry_point_id)
+        current_version = uow.indexes.get_version(collection.id)
+        if db_snapshot.version == current_version:
+            return self._restore_indexer(
+                snapshot=snapshot,
+                vectors_in_db=vectors_in_db,
+                vamana_config=vamana_config,
+            )
 
-        graph = Graph.from_db(
-            db_graph=db_graph,
-            degree=vamana_config.R,
-            dbid_to_idx=vector_store.dbid_to_idx,
+        logger.warning(f"repairing index for {collection_name}")
+        return self._repair_indexer(
+            snapshot=snapshot, vectors_in_db=vectors_in_db, vamana_config=vamana_config
         )
-
-        indexer = VamanaIndexer(
-            config=vamana_config,
-            vector_store=vector_store,
-            graph=graph,
-            entry_point=snapshot.entry_point_id or None,
-        )
-
-        unindexed_db_ids = uow.indexes.get_unindexed_vector_ids(
-            collection_id=collection.id
-        )
-
-        # If there are vectors in db that are not in graph
-        # and indexer is not new
-        if unindexed_db_ids and entry_point is not None:
-            logger.info(f"Repairing index for {collection_name}")
-
-            unindexed_ids = [
-                vector_store.get_idx(db_id)
-                for db_id in unindexed_db_ids
-                if db_id in vector_store.dbid_to_idx
-            ]
-            if unindexed_ids:
-                indexer.update(unindexed_ids)
-
-        return indexer
 
     def update(
         self, collection_name: str, vectors: List[Vector], uow: UnitOfWork
@@ -222,24 +270,3 @@ class IndexerManager:
                 query.mmr_lambda,
                 query.mmr_n,
             )
-
-    def save_all(self, uow: UnitOfWork) -> None:
-        with self._lock:
-            collection_names = list(self._indexers.keys())
-
-        for collection_name in collection_names:
-            collection = uow.collections.get_collection_by_name(collection_name)
-            if not collection:
-                continue
-
-            collection_id = collection.id  # type: ignore
-            if unindexed_db_ids := uow.indexes.get_unindexed_vector_ids(collection_id):
-                indexer = self._indexers.get(collection_name)
-                if indexer:
-                    unindexed_idxs = [
-                        indexer.vector_store.get_idx(dbid)
-                        for dbid in unindexed_db_ids
-                        if dbid in indexer.vector_store.dbid_to_idx
-                    ]
-                    if unindexed_idxs:
-                        self._persist_index(collection_name, unindexed_idxs)

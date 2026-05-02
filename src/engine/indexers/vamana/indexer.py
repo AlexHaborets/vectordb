@@ -9,6 +9,7 @@ from src.common import MetricType, config
 from src.engine.indexers.vamana.controller import AlphaController
 from src.engine.indexers.vamana.graph import Graph
 from src.engine.indexers.vamana.vector_store import VectorStore
+from src.engine.snapshot import IndexSnapshot
 from src.schemas.vector import VectorData
 
 
@@ -214,6 +215,13 @@ class VamanaIndexer:
 
         modified_ids = modified_ids_np.tolist()
         return modified_ids, entry_point_modified
+
+    def get_snapshot(self) -> Optional[IndexSnapshot]:
+        if self.entry_point is None:
+            return None
+        return self.graph.to_snapshot(
+            idx_to_dbid=self.vector_store.idx_to_dbid, entry_point=self.entry_point
+        )
 
     def _greedy_search(
         self, entry_id: int, query_vector: np.ndarray, k: int, L: int

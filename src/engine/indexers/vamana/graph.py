@@ -1,6 +1,8 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
+
+from src.engine.snapshot import IndexSnapshot
 
 
 class Graph:
@@ -11,21 +13,37 @@ class Graph:
             fill_value=-1, shape=(size, degree), dtype=np.int32
         )
 
+    def to_snapshot(
+        self, idx_to_dbid: List[int], entry_point: int
+    ) -> Optional[IndexSnapshot]:
+        """
+        Compacts the graph by removing deleted nodes
+        """
+        dbids = np.array(idx_to_dbid[: self._size], dtype=np.int64)
+        active_ids = np.where(dbids != -1)[0].astype(np.int32)
+        active_count = active_ids.shape[0]
+        remap = np.full(self._size, -1, dtype=np.int32)
+
+        if active_count == 0:
+            return None
+
+        remap[active_ids] = np.arange(active_count, dtype=np.int32)
+        compacted_graph = self.graph[active_ids].copy()
+        valid = compacted_graph != -1
+        compacted_graph[valid] = remap[compacted_graph[valid]]
+        compacted_id_map = dbids[active_ids]
+
+        return IndexSnapshot(
+            graph=compacted_graph,
+            id_map=compacted_id_map,
+            entry_point=int(remap[entry_point]),
+        )
+
     @classmethod
-    def from_db(
-        cls, db_graph: Dict[int, List[int]], dbid_to_idx: Dict[int, int], degree: int
-    ) -> "Graph":
-        size = len(dbid_to_idx)
+    def from_snapshot(cls, snapshot: np.ndarray, degree: int) -> "Graph":
+        size = snapshot.shape[0]
         graph = cls(size, degree)
-
-        for dbid, db_neigbors in db_graph.items():
-            if dbid not in dbid_to_idx:
-                continue
-
-            idx = dbid_to_idx[dbid]
-            neighbors = {dbid_to_idx[n] for n in db_neigbors if n in dbid_to_idx}
-            graph.set_neighbors(idx, neighbors)
-
+        graph.graph[:size] = snapshot
         return graph
 
     @classmethod
