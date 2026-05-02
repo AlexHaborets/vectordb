@@ -1,5 +1,4 @@
-import pickle
-from typing import Dict, List, Optional
+from typing import Optional
 
 from sqlalchemy import Integer, String, cast, delete
 from sqlalchemy.dialects.sqlite import insert
@@ -15,7 +14,7 @@ class IndexRepository:
     def bump_version(self, collection_id: int) -> int:
         stmt = insert(models.IndexMetadata).values(
             collection_id=collection_id,
-            key="vector_version",
+            key="index_version",
             value="1",
         )
 
@@ -27,7 +26,7 @@ class IndexRepository:
         return int(self.session.execute(stmt).scalar_one())
 
     def get_version(self, collection_id: int) -> int:
-        value = self.get_index_metadata(collection_id, "version")
+        value = self.get_index_metadata(collection_id, "index_version")
         return int(value) if value is not None else 0
 
     def get_index_metadata(self, collection_id: int, key: str) -> Optional[str]:
@@ -48,17 +47,8 @@ class IndexRepository:
         self.session.execute(stmt)
 
     def save_snapshot(
-        self,
-        collection_id: int,
-        version: int,
-        entry_point_id: Optional[int],
-        graph: Dict[int, List[int]],
+        self, collection_id: int, version: int, entry_point_id: int, payload: bytes
     ) -> None:
-        payload = pickle.dumps(
-            graph,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
-
         self.session.merge(
             models.IndexSnapshot(
                 collection_id=collection_id,

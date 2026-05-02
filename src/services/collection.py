@@ -101,6 +101,7 @@ class CollectionService:
                 vectors[i].vector = normalized_vectors[i].tolist()  # type: ignore
 
         new_vectors = uow.vectors.upsert_vectors(collection.id, vectors)
+        uow.indexes.bump_version(collection.id)
 
         result = [Vector.model_validate(v) for v in new_vectors]
 
@@ -121,6 +122,7 @@ class CollectionService:
         collection = self.get_collection_by_name(collection_name, uow)
 
         deleted_vectors = uow.vectors.delete_vectors(collection.id, vector_ids)
+        uow.indexes.bump_version(collection.id)
 
         internal_ids = [v.id for v in deleted_vectors]
 

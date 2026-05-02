@@ -12,10 +12,9 @@ from src.common import (
     InvalidOperationError,
     setup_logger,
 )
-
-from src.db import session_manager
-from src.db.uow import DBUnitOfWork
 from src.common.config import DB_PORT
+from src.db import session_manager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,9 +28,6 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down VectorDB...")
 
     indexer_manager = get_indexer_manager()
-    uow = DBUnitOfWork(session_manager.get_session_factory())
-    with uow:
-        indexer_manager.save_all(uow)
     indexer_manager.stop()
 
     logger.info("Closing database connections...")
