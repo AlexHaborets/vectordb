@@ -52,7 +52,7 @@ docker compose up --build
 
 ### 3. Client Usage
 
-The client is designed to be as intuitive as possible. 
+Here is a quick example of how to connect to the server, upsert vectors, and perform a search:
 
 ```python
 from trovadb.client import Client
@@ -94,9 +94,25 @@ Check out the [examples](examples/) folder in the root of the repository for det
 
 - [Large Dataset Benchmark](examples/rag.ipynb): A stress test loading 50,000+ DBpedia articles for RAG.
 
-## Why TrovaDB?
+## Roadmap
 
-The name is inspired by the italian phrase *"Cerca Trova" ("Seek and you shall find")* — a cryptic clue left by Vasari in believed to indicate that a lost [Da Vinci work](https://en.wikipedia.org/wiki/The_Battle_of_Anghiari_(Leonardo)) is hidden beneath his fresco in Florence.
+**Completed Milestones**
+- [X] Core vector store functionality 
+- [X] Persistence
+- [X] Docker support
+- [X] Benchmarking test suite
+
+**Must-Haves**
+- [ ] Comprehensive test suite and unit tests
+- [ ] In-memory client for local prototyping
+
+**Future Features**
+- [ ] Metadata filtering
+- [ ] Hybrid search support
+
+## Why "TrovaDB"?
+
+The name is inspired by the italian phrase *"Cerca Trova"* ("Seek and you shall find") — a cryptic clue left by the artist Giorgio Vasari, believed to indicate that a lost [Da Vinci mural](https://en.wikipedia.org/wiki/The_Battle_of_Anghiari_(Leonardo)) is hidden beneath his fresco in Florence. It felt like a fitting name for a fast and simple search tool.
 
 ## Acknowledgements
 

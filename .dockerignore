@@ -5,7 +5,6 @@ Dockerfile
 *.sqlite
 *.sqlite3
 *.ipynb
-*.md
 
 # Directories
 __pycache__

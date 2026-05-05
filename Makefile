@@ -22,3 +22,4 @@ clean:
 
 lock:
 	@uv lock
+	@uv export --extra server --no-hashes -o requirements.txt
