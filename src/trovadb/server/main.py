@@ -18,14 +18,14 @@ from trovadb.server.db import session_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting VectorDB...")
+    logger.info("Starting TrovaDB...")
     setup_logger()
 
-    logger.info("VectorDB started successfully")
+    logger.info("TrovaDB started successfully")
 
     yield
 
-    logger.info("Shutting down VectorDB...")
+    logger.info("Shutting down TrovaDB...")
 
     indexer_manager = get_indexer_manager()
     indexer_manager.stop()
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     session_manager.close()
 
 
-app = FastAPI(title="VectorDB", lifespan=lifespan)
+app = FastAPI(title="TrovaDB", lifespan=lifespan)
 
 app.include_router(vector_router)
 app.include_router(search_router)
@@ -61,4 +61,4 @@ def root() -> dict[str, str]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("trovadb.server.main:app", host="0.0.0.0", port=DB_PORT, reload=True)
+    uvicorn.run("trovadb.server.main:app", host="0.0.0.0", port=DB_PORT, reload=False)
