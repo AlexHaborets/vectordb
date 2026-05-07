@@ -84,9 +84,9 @@ class VamanaIndexer:
 
         self.alpha_controller.reset()
 
-    def update(self, vectors: List[VectorData] | List[int]) -> Tuple[List[int], bool]:
+    def update(self, vectors: List[VectorData] | List[int]):
         if not vectors:
-            return [], False
+            return
 
         if isinstance(vectors[0], int):
             batch_ids = vectors
@@ -94,26 +94,22 @@ class VamanaIndexer:
             batch_ids = self.vector_store.upsert_batch(vectors)  # type: ignore
 
             if len(batch_ids) == 0:
-                return [], False
+                return
 
         should_rebuild = self.entry_point is None
 
         if should_rebuild:
             self.index()
-
-            return [], True
         else:
             self.graph.resize(new_size=self.vector_store.size)
 
             alpha = self.alpha_controller.get_alpha()
 
-            forward_ids, backward_ids = self._index_batch(
+            backward_ids = self._index_batch(
                 batch_ids=np.array(batch_ids, dtype=np.int32),
                 alpha=alpha,
                 return_mod_ids=True,
             )
-
-            modified_ids = list(set(forward_ids + backward_ids))
 
             if backward_ids:
                 total_edges = sum(
@@ -123,8 +119,6 @@ class VamanaIndexer:
                 avg_degree = total_edges / len(backward_ids)
 
                 self.alpha_controller.feedback(avg_degree)
-
-            return modified_ids, False
 
     def search(
         self,
@@ -262,7 +256,7 @@ class VamanaIndexer:
 
     def _index_batch(
         self, batch_ids: np.ndarray, alpha: float, return_mod_ids: bool = False
-    ) -> Tuple[List[int], List[int]]:
+    ) -> Optional[List[int]]:
         operations.forward_indexing_pass(
             batch_ids=batch_ids,
             alpha=alpha,
@@ -286,9 +280,7 @@ class VamanaIndexer:
         )
 
         if return_mod_ids:
-            return batch_ids.tolist(), backward_ids_np.tolist()
-        else:
-            return [], []
+            return backward_ids_np.tolist()
 
     def _indexing_pass(self, alpha: float) -> None:
         sigma = self.vector_store.get_idxs()

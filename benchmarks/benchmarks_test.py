@@ -27,6 +27,7 @@ def log_results_to_csv(
     l_search: int,
     duration: float,
     throughput: float,
+    qps: float,
     avg_latency: float,
     p95_latency: float,
     recall: float,
@@ -45,6 +46,7 @@ def log_results_to_csv(
                     "l_search",
                     "indexing_time_s",
                     "throughput_vps",
+                    "qps",
                     "avg_latency_ms",
                     "p95_latency_ms",
                     "recall_at_10",
@@ -59,6 +61,7 @@ def log_results_to_csv(
                 l_search,
                 f"{duration:.4f}",
                 f"{throughput:.2f}",
+                f"{qps:.2f}",
                 f"{avg_latency:.4f}",
                 f"{p95_latency:.4f}",
                 f"{recall:.4f}",
@@ -105,18 +108,18 @@ def run_benchmark(
     # ==========================================
     dataset_name = collection.name
 
-    print(f"\n\n{'=' * 85}")
+    print(f"\n\n{'=' * 100}")
     print(
         f" Pareto Sweep Results: {dataset_name.upper()} | Experiment ID: {experiment_id}"
     )
     print(
         f" Indexing Time: {indexing_duration:.2f} s | Throughput: {throughput:.2f} v/s"
     )
-    print(f"{'-' * 85}")
+    print(f"{'-' * 100}")
     print(
-        f" {'L_search':<10} | {'Recall@10':<15} | {'Avg Latency (ms)':<20} | {'P95 Latency (ms)':<20}"
+        f" {'L_search':<10} | {'Recall@10':<15} | {'QPS':<10} | {'Avg Latency (ms)':<20} | {'P95 Latency (ms)':<20}"
     )
-    print(f"{'-' * 85}")
+    print(f"{'-' * 100}")
 
     query_vecs_loaded = query_vecs[:]
     total_expected = N_QUERIES * K_SEARCH
@@ -148,12 +151,14 @@ def run_benchmark(
         p95_latency = float(np.percentile(latencies, 95))
         recall = hits / total_expected
 
+        qps = (1000.0 / avg_latency) if avg_latency > 0 else 0.0
+
         if recall > max_recall_achieved:
             max_recall_achieved = recall
             latency_at_max_recall = avg_latency
 
         print(
-            f" {l_search:<10} | {recall:<15.4f} | {avg_latency:<20.2f} | {p95_latency:<20.2f}"
+            f" {l_search:<10} | {recall:<15.4f} | {qps:<10.2f} | {avg_latency:<20.2f} | {p95_latency:<20.2f}"
         )
 
         log_results_to_csv(
@@ -162,12 +167,13 @@ def run_benchmark(
             l_search=l_search,
             duration=indexing_duration,
             throughput=throughput,
+            qps=qps,
             avg_latency=avg_latency,
             p95_latency=p95_latency,
             recall=recall,
         )
 
-    print(f"{'=' * 85}\n")
+    print(f"{'=' * 100}\n")
 
     # ==========================================
     # 3. ASSERTIONS
@@ -189,39 +195,40 @@ def run_benchmark(
 # PYTEST RUNNERS
 # ==========================================
 
+# @pytest.mark.parametrize(
+#     "collection, dataset_name, thresholds",
+#     [
+#         (
+#             {"dim": 128, "name": "sift_small", "distance": "l2"},
+#             "siftsmall",
+#             BenchmarkThresholds(
+#                 min_throughput=1000.0, max_avg_latency=15.0, min_recall=0.90
+#             ),
+#         )
+#     ],
+#     indirect=["collection"],
+# )
+# def test_benchmark_siftsmall(collection, dataset_name, thresholds):
+#     with load_dataset(dataset_name) as (base, query, ground_truth):
+#         run_benchmark(collection, base, query, ground_truth, thresholds)
+
 
 @pytest.mark.parametrize(
     "collection, dataset_name, thresholds",
     [
         (
-            {"dim": 128, "name": "sift_small", "distance": "l2"},
-            "siftsmall",
+            {"dim": 128, "name": "sift", "distance": "l2"},
+            "sift",
             BenchmarkThresholds(
-                min_throughput=700.0, max_avg_latency=15.0, min_recall=0.90
+                min_throughput=1000.0, max_avg_latency=20.0, min_recall=0.90
             ),
         )
     ],
     indirect=["collection"],
 )
-def test_benchmark_siftsmall(collection, dataset_name, thresholds):
+def test_benchmark_sift(collection, dataset_name, thresholds):
     with load_dataset(dataset_name) as (base, query, ground_truth):
         run_benchmark(collection, base, query, ground_truth, thresholds)
-
-
-# # @pytest.mark.parametrize(
-# #     "collection, dataset_name, thresholds",
-# #     [
-# #         (
-# #             {"dim": 128, "name": "sift", "distance": "l2"},
-# #             "sift",
-# #             BenchmarkThresholds(min_throughput=1500.0, max_avg_latency=20.0, min_recall=0.90)
-# #         )
-# #     ],
-# #     indirect=["collection"]
-# # )
-# # def test_benchmark_sift(collection, dataset_name, thresholds):
-# #     with load_dataset(dataset_name) as (base, query, ground_truth):
-# #         run_benchmark(collection, base, query, ground_truth, thresholds)
 
 
 # @pytest.mark.parametrize(
@@ -231,7 +238,7 @@ def test_benchmark_siftsmall(collection, dataset_name, thresholds):
 #             {"dim": 100, "name": "glove", "distance": "cosine"},
 #             "glove",
 #             BenchmarkThresholds(
-#                 min_throughput=100.0, max_avg_latency=25.0, min_recall=0.85
+#                 min_throughput=1000.0, max_avg_latency=25.0, min_recall=0.85
 #             ),
 #         )
 #     ],
