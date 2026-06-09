@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
@@ -104,29 +104,3 @@ class Graph:
     def get_neighbors(self, idx: int) -> List[int]:
         row = self.graph[idx]
         return row[row != -1].tolist()
-
-    def to_db_graph(self, idx_to_dbid: List[int]) -> Dict[int, List[int]]:
-        graph = {}
-
-        for i in range(self._size):
-            row = self.graph[i]
-            node_db_id = idx_to_dbid[i]
-            neighbor_db_ids = [idx_to_dbid[n] for n in row if n != -1]
-            graph[node_db_id] = neighbor_db_ids
-
-        return graph
-
-    def get_subgraph(
-        self, ids: List[int], idx_to_dbid: List[int]
-    ) -> Dict[int, List[int]]:
-        graph = {}
-
-        for i in ids:
-            row = self.graph[i]
-            node_db_id = idx_to_dbid[i]
-            if node_db_id == -1:
-                continue
-            neighbor_db_ids = [idx_to_dbid[n] for n in row if n != -1]
-            graph[node_db_id] = neighbor_db_ids
-
-        return graph

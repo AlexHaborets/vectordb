@@ -37,6 +37,9 @@ VAMANA_R = 70
 
 VAMANA_TARGET_UTILIZATION: float = 0.85
 
+CONTROLLER_KP = 0.15 / (0.8 * VAMANA_R)
+CONTROLLER_KI = CONTROLLER_KP / 10.0
+
 # NOTE: Optimal alpha is within 1.0 to 2.0
 # The database dynamically adjusts alpha
 # to keep the average degree at VAMANA_TARGET_UTILIZATION * VAMANA_R

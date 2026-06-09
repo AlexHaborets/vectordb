@@ -1,5 +1,5 @@
 def main():
-    print("Hello from vectordb!")
+    print("Hello from trovadb!")
 
 
 if __name__ == "__main__":

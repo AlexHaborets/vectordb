@@ -1,11 +1,15 @@
+import csv
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
 
+import trovadb.server.common.config as config
 import trovadb.server.engine.indexers.vamana.ops as operations
 import trovadb.server.engine.indexers.vamana.reranking as reranking
-from trovadb.server.common import MetricType, config
+from trovadb.server.common import MetricType
+from trovadb.server.common.config import CONTROLLER_KI, CONTROLLER_KP
 from trovadb.server.engine.indexers.vamana.controller import AlphaController
 from trovadb.server.engine.indexers.vamana.graph import Graph
 from trovadb.server.engine.indexers.vamana.vector_store import VectorStore
@@ -42,6 +46,22 @@ class VamanaConfig:
             )
 
 
+def log_params(
+    alpha: float,
+    avg_degree: float,
+    baseline: float,
+):
+    LOG_FILE = "parameters.csv"
+    file_exists = os.path.isfile(LOG_FILE)
+
+    with open(LOG_FILE, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["alpha", "avg_degree", "baseline"])
+
+        writer.writerow([alpha, avg_degree, baseline])
+
+
 class VamanaIndexer:
     def __init__(
         self,
@@ -63,14 +83,10 @@ class VamanaIndexer:
         self._alpha_second_pass = config.alpha_second_pass
         self._target_degree = self._R * config.target_utilization
 
-        k_plant = 0.8 * self._R
-        kp = 0.15 / k_plant
-        ki = kp / 10.0
-
         self.alpha_controller = AlphaController(
             target_degree=self._target_degree,
-            kp=kp,
-            ki=ki,
+            kp=CONTROLLER_KP,
+            ki=CONTROLLER_KI,
             alpha_init=self._alpha_second_pass,
         )
 
@@ -119,6 +135,8 @@ class VamanaIndexer:
                 avg_degree = total_edges / len(backward_ids)
 
                 self.alpha_controller.feedback(avg_degree)
+
+                log_params(alpha, avg_degree, self._target_degree)
 
     def search(
         self,
