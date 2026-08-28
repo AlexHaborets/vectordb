@@ -95,6 +95,14 @@ Check out the [examples](examples/) folder in the root of the repository for det
 
 - [Large Dataset Benchmark](examples/rag.ipynb): A stress test loading 50,000+ DBpedia articles for RAG.
 
+## Benchmarks
+
+<p align="center">
+  <img src="images/pareto.png" alt="Benchmark comparing TrovaDB and ChromaDB showing Queries Per Second (QPS) vs Recall@10" width="800">
+</p>
+
+*Comparison of TrovaDB (Vamana) and ChromaDB (HNSW) evaluating Queries Per Second (QPS) against Recall@10 across GloVe 100 Angular and SIFT1M datasets. Both databases were tested using HTTP API clients.*
+
 ## Roadmap
 
 **Completed Milestones**
